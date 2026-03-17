@@ -66,44 +66,55 @@ type Tenant struct {
 	Projects []string `json:"projects,omitempty"`
 }
 
+// Ref represents a Zuul ref (change/PR reference).
+// In the Zuul API, ref information is returned as a nested object in builds
+// and as an array of refs in buildsets.
+type Ref struct {
+	Project  string `json:"project"`
+	Branch   string `json:"branch,omitempty"`
+	Change   int    `json:"change,omitempty"`
+	Patchset string `json:"patchset,omitempty"`
+	Ref      string `json:"ref,omitempty"`
+	OldRev   string `json:"oldrev,omitempty"`
+	NewRev   string `json:"newrev,omitempty"`
+	RefURL   string `json:"ref_url,omitempty"`
+}
+
 // Build represents a Zuul build.
 type Build struct {
-	UUID         string    `json:"uuid"`
-	JobName      string    `json:"job_name"`
-	Result       string    `json:"result,omitempty"`
-	StartTime    *ZuulTime `json:"start_time,omitempty"`
-	EndTime      *ZuulTime `json:"end_time,omitempty"`
-	Duration     float64   `json:"duration,omitempty"`
-	Voting       bool      `json:"voting"`
-	LogURL       string    `json:"log_url,omitempty"`
-	NodeName     string    `json:"node_name,omitempty"`
-	Project      string    `json:"project"`
-	Branch       string    `json:"branch,omitempty"`
-	Pipeline     string    `json:"pipeline"`
-	Change       int       `json:"change,omitempty"`
-	Patchset     string    `json:"patchset,omitempty"`
-	Ref          string    `json:"ref,omitempty"`
-	RefURL       string    `json:"ref_url,omitempty"`
-	EventID      string    `json:"event_id,omitempty"`
-	BuildsetUUID string    `json:"buildset_uuid,omitempty"`
+	UUID           string    `json:"uuid"`
+	JobName        string    `json:"job_name"`
+	Result         string    `json:"result,omitempty"`
+	Held           bool      `json:"held,omitempty"`
+	ExecuteTime    *ZuulTime `json:"execute_time,omitempty"`
+	StartTime      *ZuulTime `json:"start_time,omitempty"`
+	EndTime        *ZuulTime `json:"end_time,omitempty"`
+	Duration       float64   `json:"duration,omitempty"`
+	Voting         bool      `json:"voting"`
+	LogURL         string    `json:"log_url,omitempty"`
+	Nodeset        string    `json:"nodeset,omitempty"`
+	ErrorDetail    string    `json:"error_detail,omitempty"`
+	Final          bool      `json:"final,omitempty"`
+	Pipeline       string    `json:"pipeline"`
+	Ref            *Ref      `json:"ref,omitempty"`
+	EventID        string    `json:"event_id,omitempty"`
+	EventTimestamp *ZuulTime `json:"event_timestamp,omitempty"`
+	QueueItemUUID  string    `json:"queue_item_uuid,omitempty"`
 }
 
 // Buildset represents a Zuul buildset (a collection of builds for a change).
 type Buildset struct {
-	UUID       string    `json:"uuid"`
-	Result     string    `json:"result,omitempty"`
-	Message    string    `json:"message,omitempty"`
-	Project    string    `json:"project"`
-	Branch     string    `json:"branch,omitempty"`
-	Pipeline   string    `json:"pipeline"`
-	Change     int       `json:"change,omitempty"`
-	Patchset   string    `json:"patchset,omitempty"`
-	Ref        string    `json:"ref,omitempty"`
-	RefURL     string    `json:"ref_url,omitempty"`
-	EventID    string    `json:"event_id,omitempty"`
-	FirstBuild *ZuulTime `json:"first_build_start_time,omitempty"`
-	LastBuild  *ZuulTime `json:"last_build_end_time,omitempty"`
-	Builds     []Build   `json:"builds,omitempty"`
+	UUID           string    `json:"uuid"`
+	Result         string    `json:"result,omitempty"`
+	Message        string    `json:"message,omitempty"`
+	Pipeline       string    `json:"pipeline"`
+	EventID        string    `json:"event_id,omitempty"`
+	EventTimestamp *ZuulTime `json:"event_timestamp,omitempty"`
+	QueueItemUUID  string    `json:"queue_item_uuid,omitempty"`
+	FirstBuild     *ZuulTime `json:"first_build_start_time,omitempty"`
+	LastBuild      *ZuulTime `json:"last_build_end_time,omitempty"`
+	Refs           []Ref     `json:"refs,omitempty"`
+	Builds         []Build   `json:"builds,omitempty"`
 }
 
 // Job represents a Zuul job definition.

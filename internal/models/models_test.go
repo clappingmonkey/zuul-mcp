@@ -107,9 +107,12 @@ func TestBuildUnmarshal_WithTimestamps(t *testing.T) {
 		"job_name": "test-job",
 		"start_time": "2026-03-06T07:24:19",
 		"end_time": "2026-03-06T07:30:00Z",
-		"project": "my-project",
 		"pipeline": "check",
-		"voting": true
+		"voting": true,
+		"ref": {
+			"project": "my-project",
+			"branch": "main"
+		}
 	}`
 	var build Build
 	if err := json.Unmarshal([]byte(input), &build); err != nil {
@@ -130,6 +133,9 @@ func TestBuildUnmarshal_WithTimestamps(t *testing.T) {
 	if build.EndTime.Minute() != 30 {
 		t.Errorf("expected minute 30, got %d", build.EndTime.Minute())
 	}
+	if build.Ref == nil || build.Ref.Project != "my-project" {
+		t.Errorf("expected ref.project = my-project")
+	}
 }
 
 func TestBuildUnmarshal_NullTimestamps(t *testing.T) {
@@ -137,9 +143,11 @@ func TestBuildUnmarshal_NullTimestamps(t *testing.T) {
 		"uuid": "abc-123",
 		"job_name": "test-job",
 		"start_time": null,
-		"project": "my-project",
 		"pipeline": "check",
-		"voting": true
+		"voting": true,
+		"ref": {
+			"project": "my-project"
+		}
 	}`
 	var build Build
 	if err := json.Unmarshal([]byte(input), &build); err != nil {
@@ -151,5 +159,64 @@ func TestBuildUnmarshal_NullTimestamps(t *testing.T) {
 	// StartTime should be nil (pointer is nil) or zero
 	if build.StartTime != nil && !build.StartTime.IsZero() {
 		t.Errorf("expected nil or zero StartTime, got %v", build.StartTime)
+	}
+}
+
+func TestRefUnmarshal(t *testing.T) {
+	input := `{
+		"project": "openstack/nova",
+		"branch": "master",
+		"change": 978841,
+		"patchset": "6",
+		"ref": "refs/changes/41/978841/6",
+		"oldrev": null,
+		"newrev": null,
+		"ref_url": "https://review.opendev.org/c/openstack/nova/+/978841"
+	}`
+	var ref Ref
+	if err := json.Unmarshal([]byte(input), &ref); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref.Project != "openstack/nova" {
+		t.Errorf("expected openstack/nova, got %s", ref.Project)
+	}
+	if ref.Change != 978841 {
+		t.Errorf("expected change 978841, got %d", ref.Change)
+	}
+	if ref.RefURL != "https://review.opendev.org/c/openstack/nova/+/978841" {
+		t.Errorf("expected ref_url, got %s", ref.RefURL)
+	}
+}
+
+func TestBuildsetUnmarshal_WithRefs(t *testing.T) {
+	input := `{
+		"uuid": "aed32a12f1454f7599b4eadaad8d8694",
+		"result": "FAILURE",
+		"message": "Build failed.",
+		"pipeline": "check",
+		"refs": [
+			{
+				"project": "openstack/releases",
+				"branch": "master",
+				"change": 980900,
+				"patchset": "2"
+			}
+		]
+	}`
+	var bs Buildset
+	if err := json.Unmarshal([]byte(input), &bs); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if bs.UUID != "aed32a12f1454f7599b4eadaad8d8694" {
+		t.Errorf("expected uuid aed32a12f1454f7599b4eadaad8d8694, got %s", bs.UUID)
+	}
+	if len(bs.Refs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(bs.Refs))
+	}
+	if bs.Refs[0].Project != "openstack/releases" {
+		t.Errorf("expected openstack/releases, got %s", bs.Refs[0].Project)
+	}
+	if bs.Refs[0].Change != 980900 {
+		t.Errorf("expected change 980900, got %d", bs.Refs[0].Change)
 	}
 }
