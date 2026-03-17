@@ -1,7 +1,64 @@
 // Package models defines data structures for Zuul API responses.
 package models
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// ZuulTime is a custom time type that handles Zuul's timestamp formats.
+// Zuul may return timestamps without timezone suffix (e.g., "2026-03-06T07:24:19")
+// which Go's time.Time cannot parse by default.
+type ZuulTime struct {
+	time.Time
+}
+
+// zuulTimeFormats lists the timestamp formats to try, in order of preference.
+var zuulTimeFormats = []string{
+	time.RFC3339,
+	time.RFC3339Nano,
+	"2006-01-02T15:04:05", // Zuul format without timezone (assume UTC)
+}
+
+// UnmarshalJSON implements json.Unmarshaler for ZuulTime.
+func (zt *ZuulTime) UnmarshalJSON(data []byte) error {
+	// Handle null
+	if string(data) == "null" {
+		return nil
+	}
+
+	// Remove quotes
+	s := strings.Trim(string(data), "\"")
+	if s == "" {
+		return nil
+	}
+
+	// Try each format
+	var parseErr error
+	for _, format := range zuulTimeFormats {
+		t, err := time.Parse(format, s)
+		if err == nil {
+			// For formats without timezone, assume UTC
+			if format == "2006-01-02T15:04:05" {
+				t = t.UTC()
+			}
+			zt.Time = t
+			return nil
+		}
+		parseErr = err
+	}
+
+	return fmt.Errorf("unable to parse time %q: %w", s, parseErr)
+}
+
+// MarshalJSON implements json.Marshaler for ZuulTime.
+func (zt ZuulTime) MarshalJSON() ([]byte, error) {
+	if zt.IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(fmt.Sprintf("%q", zt.Time.Format(time.RFC3339))), nil
+}
 
 // Tenant represents a Zuul tenant.
 type Tenant struct {
@@ -11,42 +68,42 @@ type Tenant struct {
 
 // Build represents a Zuul build.
 type Build struct {
-	UUID         string     `json:"uuid"`
-	JobName      string     `json:"job_name"`
-	Result       string     `json:"result,omitempty"`
-	StartTime    *time.Time `json:"start_time,omitempty"`
-	EndTime      *time.Time `json:"end_time,omitempty"`
-	Duration     float64    `json:"duration,omitempty"`
-	Voting       bool       `json:"voting"`
-	LogURL       string     `json:"log_url,omitempty"`
-	NodeName     string     `json:"node_name,omitempty"`
-	Project      string     `json:"project"`
-	Branch       string     `json:"branch,omitempty"`
-	Pipeline     string     `json:"pipeline"`
-	Change       int        `json:"change,omitempty"`
-	Patchset     string     `json:"patchset,omitempty"`
-	Ref          string     `json:"ref,omitempty"`
-	RefURL       string     `json:"ref_url,omitempty"`
-	EventID      string     `json:"event_id,omitempty"`
-	BuildsetUUID string     `json:"buildset_uuid,omitempty"`
+	UUID         string    `json:"uuid"`
+	JobName      string    `json:"job_name"`
+	Result       string    `json:"result,omitempty"`
+	StartTime    *ZuulTime `json:"start_time,omitempty"`
+	EndTime      *ZuulTime `json:"end_time,omitempty"`
+	Duration     float64   `json:"duration,omitempty"`
+	Voting       bool      `json:"voting"`
+	LogURL       string    `json:"log_url,omitempty"`
+	NodeName     string    `json:"node_name,omitempty"`
+	Project      string    `json:"project"`
+	Branch       string    `json:"branch,omitempty"`
+	Pipeline     string    `json:"pipeline"`
+	Change       int       `json:"change,omitempty"`
+	Patchset     string    `json:"patchset,omitempty"`
+	Ref          string    `json:"ref,omitempty"`
+	RefURL       string    `json:"ref_url,omitempty"`
+	EventID      string    `json:"event_id,omitempty"`
+	BuildsetUUID string    `json:"buildset_uuid,omitempty"`
 }
 
 // Buildset represents a Zuul buildset (a collection of builds for a change).
 type Buildset struct {
-	UUID       string     `json:"uuid"`
-	Result     string     `json:"result,omitempty"`
-	Message    string     `json:"message,omitempty"`
-	Project    string     `json:"project"`
-	Branch     string     `json:"branch,omitempty"`
-	Pipeline   string     `json:"pipeline"`
-	Change     int        `json:"change,omitempty"`
-	Patchset   string     `json:"patchset,omitempty"`
-	Ref        string     `json:"ref,omitempty"`
-	RefURL     string     `json:"ref_url,omitempty"`
-	EventID    string     `json:"event_id,omitempty"`
-	FirstBuild *time.Time `json:"first_build_start_time,omitempty"`
-	LastBuild  *time.Time `json:"last_build_end_time,omitempty"`
-	Builds     []Build    `json:"builds,omitempty"`
+	UUID       string    `json:"uuid"`
+	Result     string    `json:"result,omitempty"`
+	Message    string    `json:"message,omitempty"`
+	Project    string    `json:"project"`
+	Branch     string    `json:"branch,omitempty"`
+	Pipeline   string    `json:"pipeline"`
+	Change     int       `json:"change,omitempty"`
+	Patchset   string    `json:"patchset,omitempty"`
+	Ref        string    `json:"ref,omitempty"`
+	RefURL     string    `json:"ref_url,omitempty"`
+	EventID    string    `json:"event_id,omitempty"`
+	FirstBuild *ZuulTime `json:"first_build_start_time,omitempty"`
+	LastBuild  *ZuulTime `json:"last_build_end_time,omitempty"`
+	Builds     []Build   `json:"builds,omitempty"`
 }
 
 // Job represents a Zuul job definition.
@@ -102,7 +159,7 @@ type QueueItem struct {
 	Change        int         `json:"change,omitempty"`
 	Patchset      string      `json:"patchset,omitempty"`
 	Ref           string      `json:"ref,omitempty"`
-	EnqueueTime   *time.Time  `json:"enqueue_time,omitempty"`
+	EnqueueTime   *ZuulTime   `json:"enqueue_time,omitempty"`
 	RemainingTime int         `json:"remaining_time,omitempty"`
 	Jobs          []JobStatus `json:"jobs,omitempty"`
 }
@@ -147,17 +204,17 @@ type JobConfig struct {
 
 // Autohold represents an autohold request.
 type Autohold struct {
-	ID             int        `json:"id"`
-	Tenant         string     `json:"tenant"`
-	Project        string     `json:"project"`
-	Job            string     `json:"job"`
-	RefFilter      string     `json:"ref_filter"`
-	MaxCount       int        `json:"max_count"`
-	CurrentCount   int        `json:"current_count"`
-	Reason         string     `json:"reason"`
-	NodeExpiration int        `json:"node_expiration,omitempty"`
-	RequestTime    *time.Time `json:"request_time,omitempty"`
-	RequestedBy    string     `json:"requested_by,omitempty"`
+	ID             int       `json:"id"`
+	Tenant         string    `json:"tenant"`
+	Project        string    `json:"project"`
+	Job            string    `json:"job"`
+	RefFilter      string    `json:"ref_filter"`
+	MaxCount       int       `json:"max_count"`
+	CurrentCount   int       `json:"current_count"`
+	Reason         string    `json:"reason"`
+	NodeExpiration int       `json:"node_expiration,omitempty"`
+	RequestTime    *ZuulTime `json:"request_time,omitempty"`
+	RequestedBy    string    `json:"requested_by,omitempty"`
 }
 
 // AutoholdRequest represents a request to create an autohold.
@@ -180,7 +237,7 @@ type ConfigError struct {
 type TenantStatus struct {
 	Pipelines        []PipelineStatus `json:"pipelines,omitempty"`
 	ZuulVersion      string           `json:"zuul_version,omitempty"`
-	LastReconfigured *time.Time       `json:"last_reconfigured,omitempty"`
+	LastReconfigured *ZuulTime        `json:"last_reconfigured,omitempty"`
 }
 
 // Connection represents a Zuul connection.
