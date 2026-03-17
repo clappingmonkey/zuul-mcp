@@ -50,11 +50,18 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - uses: tibdex/github-app-token@v2
+        id: app-token
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
+          token: ${{ steps.app-token.outputs.token }}
 
   publish:
     name: Publish Binaries
