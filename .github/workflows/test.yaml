@@ -17,38 +17,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.18.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-
-      - name: Run tests
-        run: bazel test //... --config=ci
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [test]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.18.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-
-      - name: Build
-        run: bazel build //cmd/zuul-mcp --config=ci
+  ci:
+    name: CI
+    uses: ./.github/workflows/bazel-ci.yaml
+    with:
+      run-tests: true
+      run-build: true
 
   gazelle:
     name: Gazelle
@@ -60,7 +34,7 @@ jobs:
         uses: bazel-contrib/setup-bazel@0.18.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
+          disk-cache: bazel-${{ github.ref_name }}-${{ hashFiles('MODULE.bazel.lock') }}
           repository-cache: true
 
       - name: Check BUILD files are up to date
