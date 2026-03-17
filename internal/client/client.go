@@ -173,6 +173,54 @@ func (c *Client) GetBuild(ctx context.Context, tenant, uuid string) (*models.Bui
 	return &build, nil
 }
 
+// GetBuildLogs returns the job output logs for a specific build.
+// It first fetches the build to get the log URL, then fetches the logs.
+func (c *Client) GetBuildLogs(ctx context.Context, tenant, uuid string) (string, error) {
+	// Get build to find log_url
+	build, err := c.GetBuild(ctx, tenant, uuid)
+	if err != nil {
+		return "", err
+	}
+
+	if build.LogURL == "" {
+		return "", fmt.Errorf("build %s has no log URL", uuid)
+	}
+
+	// Fetch logs from log_url/job-output.txt
+	logURL := strings.TrimSuffix(build.LogURL, "/") + "/job-output.txt"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating log request: %w", err)
+	}
+
+	// Log storage might not need auth, but include it if available
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetching logs: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", fmt.Errorf("logs not available for build %s", uuid)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status %d fetching logs", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading logs: %w", err)
+	}
+
+	return string(body), nil
+}
+
 // BuildsetsQuery holds optional query parameters for listing buildsets.
 type BuildsetsQuery struct {
 	Project  string
