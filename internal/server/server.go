@@ -102,6 +102,24 @@ func (s *Server) registerTools() {
 		s.handleGetBuild,
 	)
 
+	// Get build logs
+	s.mcpServer.AddTool(
+		mcp.NewTool("get_build_logs",
+			mcp.WithDescription("Get the job output logs for a specific build"),
+			mcp.WithString("uuid",
+				mcp.Required(),
+				mcp.Description("Build UUID"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+			mcp.WithNumber("tail_lines",
+				mcp.Description("Return only the last N lines of the log (optional, returns full log if not specified)"),
+			),
+		),
+		s.handleGetBuildLogs,
+	)
+
 	// List buildsets
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_buildsets",

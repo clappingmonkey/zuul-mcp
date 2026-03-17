@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/config"
@@ -119,5 +120,113 @@ func TestErrorResponse(t *testing.T) {
 	_, err := c.ListTenants(context.Background())
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestGetBuildLogs(t *testing.T) {
+	// Create a server that handles both build and log requests
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tenant/test-tenant/build/build-123":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"uuid":     "build-123",
+				"job_name": "test-job",
+				"project":  "my-project",
+				"pipeline": "check",
+				"voting":   true,
+				"log_url":  "http://" + r.Host + "/logs/build-123",
+			})
+		case "/logs/build-123/job-output.txt":
+			w.Write([]byte("Job started\nRunning tests...\nJob finished"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	logs, err := c.GetBuildLogs(context.Background(), "test-tenant", "build-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(logs, "Running tests") {
+		t.Errorf("expected logs to contain 'Running tests', got: %s", logs)
+	}
+}
+
+func TestGetBuildLogs_BuildNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("build not found"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.GetBuildLogs(context.Background(), "test-tenant", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestGetBuildLogs_NoLogURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"uuid":     "build-123",
+			"job_name": "test-job",
+			"project":  "my-project",
+			"pipeline": "check",
+			"voting":   true,
+			// No log_url
+		})
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.GetBuildLogs(context.Background(), "test-tenant", "build-123")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no log URL") {
+		t.Errorf("expected 'no log URL' error, got: %v", err)
+	}
+}
+
+func TestGetBuildLogs_LogsNotAvailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/build/") {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"uuid":     "build-123",
+				"job_name": "test-job",
+				"project":  "my-project",
+				"pipeline": "check",
+				"voting":   true,
+				"log_url":  "http://" + r.Host + "/logs/build-123",
+			})
+		} else {
+			// Logs endpoint returns 404
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.GetBuildLogs(context.Background(), "test-tenant", "build-123")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "logs not available") {
+		t.Errorf("expected 'logs not available' error, got: %v", err)
 	}
 }

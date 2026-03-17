@@ -4,10 +4,11 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
 
 ## Features
 
-- **15 MCP Tools** for comprehensive Zuul interaction:
+- **16 MCP Tools** for comprehensive Zuul interaction:
   - `list_tenants` - List all Zuul tenants
   - `list_builds` - Query builds with filters (project, pipeline, branch, result, etc.)
   - `get_build` - Get build details by UUID
+  - `get_build_logs` - Get job output logs for a build
   - `list_buildsets` - Query buildsets with filters
   - `list_jobs` - List jobs in a tenant
   - `get_job` - Get job details

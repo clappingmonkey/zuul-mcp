@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/client"
 	"github.com/clappingmonkey/zuul-mcp/internal/models"
@@ -317,4 +318,34 @@ func (s *Server) handleDeleteAutohold(ctx context.Context, req mcp.CallToolReque
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted autohold request %d", int(requestID))), nil
+}
+
+// handleGetBuildLogs handles the get_build_logs tool.
+func (s *Server) handleGetBuildLogs(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	logs, err := s.zuulClient.GetBuildLogs(ctx, tenant, uuid)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get build logs: %v", err)), nil
+	}
+
+	// Optionally truncate to last N lines
+	tailLines := int(req.GetFloat("tail_lines", 0))
+	if tailLines > 0 {
+		lines := strings.Split(logs, "\n")
+		if len(lines) > tailLines {
+			lines = lines[len(lines)-tailLines:]
+			logs = strings.Join(lines, "\n")
+		}
+	}
+
+	return mcp.NewToolResultText(logs), nil
 }
