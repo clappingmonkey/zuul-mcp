@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "zuul-mcp_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/clappingmonkey/zuul-mcp/cmd/zuul-mcp",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//internal/config",
+        "//internal/server",
+        "@com_github_mark3labs_mcp_go//server",
+    ],
+)
+
+go_binary(
+    name = "zuul-mcp",
+    embed = [":zuul-mcp_lib"],
+    visibility = ["//visibility:public"],
+)

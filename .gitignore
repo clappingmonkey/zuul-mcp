@@ -1,0 +1,21 @@
+# Binaries
+zuul-mcp
+*.exe
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Bazel
+bazel-*
+
+# Go
+*.test
+coverage.out
+
+# OS
+.DS_Store
+Thumbs.db
