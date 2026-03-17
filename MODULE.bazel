@@ -2,7 +2,7 @@
 
 module(
     name = "zuul_mcp",
-    version = "0.2.0",  # x-release-please-version
+    version = "0.2.1",  # x-release-please-version
 )
 
 # Platform definitions for cross-compilation

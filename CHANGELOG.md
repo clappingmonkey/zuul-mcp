@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.2.0...v0.2.1) (2026-03-17)
+
+
+### Documentation
+
+* add version badge, CLI options, and stamped build instructions ([#8](https://github.com/clappingmonkey/zuul-mcp/issues/8)) ([8e49657](https://github.com/clappingmonkey/zuul-mcp/commit/8e496574e862d896535a906a4f369729548b5ecd))
+
 ## [0.2.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.1.0...v0.2.0) (2026-03-17)
 
 
