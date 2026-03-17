@@ -2,6 +2,7 @@
 
 # Build settings
 build --enable_bzlmod
+build --workspace_status_command=build/status.sh
 
 # Test settings
 test --test_output=errors
@@ -31,3 +32,6 @@ build:windows_amd64 --@rules_go//go/config:static=false
 build:ci --noshow_progress
 build:ci --noshow_loading_progress
 test:ci --test_output=all
+
+# Release configuration: enable workspace stamping for version injection
+build:release --stamp

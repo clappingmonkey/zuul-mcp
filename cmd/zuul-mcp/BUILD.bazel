@@ -16,4 +16,9 @@ go_binary(
     name = "zuul-mcp",
     embed = [":zuul-mcp_lib"],
     visibility = ["//visibility:public"],
+    x_defs = {
+        "main.version": "{STABLE_GIT_TAG}",
+        "main.commit": "{STABLE_GIT_COMMIT}",
+        "main.date": "{BUILD_DATE}",
+    },
 )

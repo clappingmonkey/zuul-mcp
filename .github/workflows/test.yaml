@@ -1,17 +1,27 @@
-name: CI
+name: Test
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  pr-title:
+    name: PR Title (Conventional Commits)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.18.0
@@ -28,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.18.0
@@ -44,7 +54,7 @@ jobs:
     name: Gazelle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.18.0

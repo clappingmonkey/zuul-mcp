@@ -2,20 +2,18 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.18.0
@@ -27,12 +25,44 @@ jobs:
       - name: Run tests
         run: bazel test //... --config=ci
 
-  release:
-    name: Release
+  build:
+    name: Build
     runs-on: ubuntu-latest
     needs: [test]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@0.18.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Build
+        run: bazel build //cmd/zuul-mcp --config=ci
+
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    needs: [build]
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Publish Binaries
+    runs-on: ubuntu-latest
+    needs: [release-please]
+    if: needs.release-please.outputs.release_created == 'true'
+    steps:
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -46,37 +76,35 @@ jobs:
       - name: Build binaries
         run: |
           mkdir -p dist
-          
+
           # Linux amd64 (static binary)
-          bazel build //cmd/zuul-mcp --config=linux_amd64 --config=ci
+          bazel build //cmd/zuul-mcp --config=linux_amd64 --config=ci --config=release
           cp bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp dist/zuul-mcp-linux-amd64
-          
+
           # Linux arm64 (static binary)
-          bazel build //cmd/zuul-mcp --config=linux_arm64 --config=ci
+          bazel build //cmd/zuul-mcp --config=linux_arm64 --config=ci --config=release
           cp bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp dist/zuul-mcp-linux-arm64
-          
+
           # macOS amd64
-          bazel build //cmd/zuul-mcp --config=darwin_amd64 --config=ci
+          bazel build //cmd/zuul-mcp --config=darwin_amd64 --config=ci --config=release
           cp bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp dist/zuul-mcp-darwin-amd64
-          
+
           # macOS arm64 (Apple Silicon)
-          bazel build //cmd/zuul-mcp --config=darwin_arm64 --config=ci
+          bazel build //cmd/zuul-mcp --config=darwin_arm64 --config=ci --config=release
           cp bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp dist/zuul-mcp-darwin-arm64
-          
+
           # Windows amd64
-          bazel build //cmd/zuul-mcp --config=windows_amd64 --config=ci
+          bazel build //cmd/zuul-mcp --config=windows_amd64 --config=ci --config=release
           cp bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp.exe dist/zuul-mcp-windows-amd64.exe
-          
+
           # Create checksums
           cd dist
           sha256sum * > checksums.txt
 
-      - name: Create Release
+      - name: Upload binaries to release
         uses: softprops/action-gh-release@v2
         with:
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
             dist/zuul-mcp-linux-amd64
             dist/zuul-mcp-linux-arm64
