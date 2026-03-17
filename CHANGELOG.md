@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/clappingmonkey/zuul-mcp/compare/v0.2.1...v0.2.2) (2026-03-17)
+
+
+### Bug Fixes
+
+* **models:** correct Build and Buildset to match Zuul API response fo… ([#10](https://github.com/clappingmonkey/zuul-mcp/issues/10)) ([232efe0](https://github.com/clappingmonkey/zuul-mcp/commit/232efe0d3e69c103b94305a68f969b22497d150c))
+
 ## [0.2.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.2.0...v0.2.1) (2026-03-17)
 
 
