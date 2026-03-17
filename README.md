@@ -1,5 +1,7 @@
 # Zuul MCP Server
 
+[![Release](https://img.shields.io/github/v/release/clappingmonkey/zuul-mcp)](https://github.com/clappingmonkey/zuul-mcp/releases)
+
 A Model Context Protocol (MCP) server that enables AI applications like Claude to interact with [Zuul CI/CD](https://zuul-ci.org/) systems.
 
 ## Features
@@ -118,6 +120,24 @@ ZUUL_URL=https://zuul.example.com ZUUL_TRANSPORT=http zuul-mcp
 zuul-mcp -transport=http -port=8080
 ```
 
+## Command Line Options
+
+```bash
+zuul-mcp [options]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-version` | Show version information and exit |
+| `-transport` | Transport mode: `stdio` (default), `http`, or `sse` |
+| `-port` | HTTP/SSE server port (default: `8080`) |
+
+Example version output:
+
+```
+zuul-mcp 0.2.0 (abc1234) built on 2024-01-15T10:30:00Z
+```
+
 ## Example Prompts for Claude
 
 Once configured, you can ask Claude questions like:
@@ -141,8 +161,11 @@ This project uses Bazel for building, testing, and dependency management. No `go
 ### Build
 
 ```bash
-# Build the binary
+# Build the binary (development)
 bazel build //cmd/zuul-mcp
+
+# Build with version stamping (for releases)
+bazel build //cmd/zuul-mcp --config=release
 
 # The binary will be at:
 # bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp
