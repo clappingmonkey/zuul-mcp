@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.2.2...v0.3.0) (2026-03-18)
+
+
+### Features
+
+* add --env-file flag for loading configuration from file ([#12](https://github.com/clappingmonkey/zuul-mcp/issues/12)) ([cdd6584](https://github.com/clappingmonkey/zuul-mcp/commit/cdd6584902e555df3c890da9a842da59d1fe7383))
+
 ## [0.2.2](https://github.com/clappingmonkey/zuul-mcp/compare/v0.2.1...v0.2.2) (2026-03-17)
 
 
