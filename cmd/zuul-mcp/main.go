@@ -20,6 +20,7 @@ var (
 
 func main() {
 	// Parse command line flags
+	envFile := flag.String("env-file", "", "Path to .env file for configuration")
 	transport := flag.String("transport", "", "Transport mode: stdio (default) or http/sse")
 	port := flag.String("port", "", "HTTP/SSE server port (default: 8080)")
 	showVersion := flag.Bool("version", false, "Show version information")
@@ -28,6 +29,13 @@ func main() {
 	if *showVersion {
 		fmt.Printf("zuul-mcp %s (%s) built on %s\n", version, commit, date)
 		os.Exit(0)
+	}
+
+	// Load environment variables from file if specified
+	if *envFile != "" {
+		if err := config.LoadEnvFile(*envFile); err != nil {
+			log.Fatalf("Failed to load env file: %v", err)
+		}
 	}
 
 	// Load configuration
