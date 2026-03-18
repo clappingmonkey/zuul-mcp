@@ -60,7 +60,9 @@ go install github.com/clappingmonkey/zuul-mcp/cmd/zuul-mcp@latest
 
 ## Configuration
 
-Configuration is done via environment variables:
+Configuration can be done via environment variables or an env file:
+
+### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -69,6 +71,25 @@ Configuration is done via environment variables:
 | `ZUUL_AUTH_TOKEN` | No | JWT Bearer token for authenticated endpoints (autoholds) |
 | `ZUUL_TRANSPORT` | No | Transport mode: `stdio` (default), `http`, or `sse` |
 | `ZUUL_HTTP_PORT` | No | HTTP/SSE server port (default: `8080`) |
+
+### Using an Env File
+
+You can use the `--env-file` flag to load configuration from a file instead of environment variables:
+
+```bash
+zuul-mcp --env-file /path/to/.env
+```
+
+The env file format is simple key-value pairs:
+
+```env
+# .env.zuul
+ZUUL_URL=https://zuul.example.com
+ZUUL_DEFAULT_TENANT=openstack
+ZUUL_AUTH_TOKEN=your-jwt-token
+```
+
+**Note**: Existing environment variables take precedence over values in the env file. This allows you to override specific settings without modifying the file.
 
 ## Usage with Claude Desktop
 
@@ -108,6 +129,19 @@ For authenticated operations (autoholds):
 }
 ```
 
+Alternatively, using an env file (useful for keeping secrets out of the config):
+
+```json
+{
+  "mcpServers": {
+    "zuul": {
+      "command": "/usr/local/bin/zuul-mcp",
+      "args": ["--env-file", "/path/to/.env.zuul"]
+    }
+  }
+}
+```
+
 ## Usage with HTTP Transport
 
 For remote or web-based access:
@@ -128,9 +162,10 @@ zuul-mcp [options]
 
 | Flag | Description |
 |------|-------------|
-| `-version` | Show version information and exit |
+| `-env-file` | Path to `.env` file for configuration |
 | `-transport` | Transport mode: `stdio` (default), `http`, or `sse` |
 | `-port` | HTTP/SSE server port (default: `8080`) |
+| `-version` | Show version information and exit |
 
 Example version output:
 
