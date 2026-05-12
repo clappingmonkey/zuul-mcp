@@ -6,20 +6,26 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
 
 ## Features
 
-- **16 MCP Tools** for comprehensive Zuul interaction:
+- **22 MCP Tools** for comprehensive Zuul interaction:
   - `list_tenants` - List all Zuul tenants
   - `list_builds` - Query builds with filters (project, pipeline, branch, result, etc.)
   - `get_build` - Get build details by UUID
   - `get_build_logs` - Get job output logs for a build
   - `list_buildsets` - Query buildsets with filters
+  - `get_buildset` - Get buildset details by UUID
   - `list_jobs` - List jobs in a tenant
   - `get_job` - Get job details
+  - `get_job_variants` - Get variant configurations for a specific job
   - `list_pipelines` - List pipelines
   - `get_pipeline_status` - Get current pipeline status including queue
   - `list_projects` - List projects
   - `get_project` - Get project details
   - `get_tenant_status` - Get overall tenant status
   - `get_config_errors` - Get configuration errors
+  - `list_nodes` - List nodepool nodes
+  - `list_labels` - List available node labels
+  - `list_connections` - List all Zuul connections
+  - `list_semaphores` - List semaphores
   - `list_autoholds` - List autohold requests (requires auth)
   - `create_autohold` - Create autohold request (requires auth)
   - `delete_autohold` - Delete autohold request (requires auth)
@@ -183,6 +189,10 @@ Once configured, you can ask Claude questions like:
 - "Are there any configuration errors in the openstack tenant?"
 - "Show me details of build UUID abc123..."
 - "Create an autohold for job my-failing-job in project my-project"
+- "What node labels are available in this tenant?"
+- "Show me the variants for job build-container"
+- "List all connections configured in Zuul"
+- "What semaphores are defined in the tenant?"
 
 ## Development
 
