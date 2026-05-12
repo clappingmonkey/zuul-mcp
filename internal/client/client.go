@@ -445,3 +445,14 @@ func (c *Client) ListLabels(ctx context.Context, tenant string) ([]json.RawMessa
 	}
 	return labels, nil
 }
+
+// ListConnections returns the list of Zuul connections.
+// TODO: Replace json.RawMessage with the typed Connection model once the Zuul API
+// response schema for /connections is documented and verified against a live instance.
+func (c *Client) ListConnections(ctx context.Context) ([]json.RawMessage, error) {
+	var connections []json.RawMessage
+	if err := c.get(ctx, "/api/connections", &connections); err != nil {
+		return nil, fmt.Errorf("listing connections: %w", err)
+	}
+	return connections, nil
+}
