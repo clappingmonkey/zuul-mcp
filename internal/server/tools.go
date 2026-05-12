@@ -443,3 +443,129 @@ func (s *Server) handleGetBuildLogs(ctx context.Context, req mcp.CallToolRequest
 
 	return mcp.NewToolResultText(logs), nil
 }
+
+// handleEnqueue handles the enqueue tool.
+func (s *Server) handleEnqueue(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if !s.config.HasAuth() {
+		return mcp.NewToolResultError(ErrNoAuth.Error()), nil
+	}
+
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	project, err := req.RequireString("project")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	pipeline, err := req.RequireString("pipeline")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	change, err := req.RequireString("change")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	enqReq := &client.EnqueueRequest{
+		Pipeline: pipeline,
+		Change:   change,
+		Trigger:  req.GetString("trigger", ""),
+	}
+
+	err = s.zuulClient.Enqueue(ctx, tenant, project, enqReq)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to enqueue change: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully enqueued change %s into pipeline %s for project %s", change, pipeline, project)), nil
+}
+
+// handleDequeue handles the dequeue tool.
+func (s *Server) handleDequeue(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if !s.config.HasAuth() {
+		return mcp.NewToolResultError(ErrNoAuth.Error()), nil
+	}
+
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	project, err := req.RequireString("project")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	pipeline, err := req.RequireString("pipeline")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	change := req.GetString("change", "")
+	ref := req.GetString("ref", "")
+
+	if change == "" && ref == "" {
+		return mcp.NewToolResultError("either 'change' or 'ref' must be provided"), nil
+	}
+
+	deqReq := &client.DequeueRequest{
+		Pipeline: pipeline,
+		Change:   change,
+		Ref:      ref,
+	}
+
+	err = s.zuulClient.Dequeue(ctx, tenant, project, deqReq)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to dequeue: %v", err)), nil
+	}
+
+	target := change
+	if target == "" {
+		target = ref
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully dequeued %s from pipeline %s for project %s", target, pipeline, project)), nil
+}
+
+// handlePromote handles the promote tool.
+func (s *Server) handlePromote(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if !s.config.HasAuth() {
+		return mcp.NewToolResultError(ErrNoAuth.Error()), nil
+	}
+
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	pipeline, err := req.RequireString("pipeline")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	changesStr, err := req.RequireString("changes")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Split space-separated change IDs (e.g., "12345,1 13336,3")
+	changes := strings.Fields(changesStr)
+	if len(changes) == 0 {
+		return mcp.NewToolResultError("at least one change ID must be provided"), nil
+	}
+
+	promReq := &client.PromoteRequest{
+		Pipeline: pipeline,
+		Changes:  changes,
+	}
+
+	err = s.zuulClient.Promote(ctx, tenant, promReq)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to promote changes: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully promoted %d change(s) in pipeline %s", len(changes), pipeline)), nil
+}

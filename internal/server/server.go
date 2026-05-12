@@ -383,6 +383,73 @@ func (s *Server) registerTools() {
 		),
 		s.handleDeleteAutohold,
 	)
+
+	// Enqueue change
+	s.mcpServer.AddTool(
+		mcp.NewTool("enqueue",
+			mcp.WithDescription("Enqueue a change into a pipeline (requires authentication)"),
+			mcp.WithString("project",
+				mcp.Required(),
+				mcp.Description("Project name"),
+			),
+			mcp.WithString("pipeline",
+				mcp.Required(),
+				mcp.Description("Pipeline name"),
+			),
+			mcp.WithString("change",
+				mcp.Required(),
+				mcp.Description("Change ID in format <number>,<patchset> (e.g., '12345,1')"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleEnqueue,
+	)
+
+	// Dequeue change
+	s.mcpServer.AddTool(
+		mcp.NewTool("dequeue",
+			mcp.WithDescription("Dequeue a change or ref from a pipeline (requires authentication)"),
+			mcp.WithString("project",
+				mcp.Required(),
+				mcp.Description("Project name"),
+			),
+			mcp.WithString("pipeline",
+				mcp.Required(),
+				mcp.Description("Pipeline name"),
+			),
+			mcp.WithString("change",
+				mcp.Description("Change ID in format <number>,<patchset> (provide change or ref)"),
+			),
+			mcp.WithString("ref",
+				mcp.Description("Git ref name (provide change or ref)"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleDequeue,
+	)
+
+	// Promote changes
+	s.mcpServer.AddTool(
+		mcp.NewTool("promote",
+			mcp.WithDescription("Promote changes to the top of a pipeline queue (requires authentication)"),
+			mcp.WithString("pipeline",
+				mcp.Required(),
+				mcp.Description("Pipeline name"),
+			),
+			mcp.WithString("changes",
+				mcp.Required(),
+				mcp.Description("Comma-separated change IDs in format <number>,<patchset> (e.g., '12345,1 13336,3')"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handlePromote,
+	)
 }
 
 // getTenant returns the tenant from request or falls back to default.

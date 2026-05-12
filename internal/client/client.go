@@ -482,3 +482,91 @@ func (c *Client) GetJobVariants(ctx context.Context, tenant, jobName string) ([]
 	}
 	return variants, nil
 }
+
+// EnqueueRequest represents a request to enqueue a change.
+type EnqueueRequest struct {
+	Pipeline string `json:"pipeline"`
+	Change   string `json:"change"`
+	Trigger  string `json:"trigger,omitempty"`
+}
+
+// Enqueue enqueues a change into a pipeline (requires auth).
+func (c *Client) Enqueue(ctx context.Context, tenant, project string, req *EnqueueRequest) error {
+	path := fmt.Sprintf("/api/tenant/%s/project/%s/enqueue",
+		url.PathEscape(tenant), url.PathEscape(project))
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
+	if err != nil {
+		return fmt.Errorf("enqueueing change: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// DequeueRequest represents a request to dequeue a change.
+type DequeueRequest struct {
+	Pipeline string `json:"pipeline"`
+	Change   string `json:"change,omitempty"`
+	Ref      string `json:"ref,omitempty"`
+}
+
+// Dequeue dequeues a change or ref from a pipeline (requires auth).
+func (c *Client) Dequeue(ctx context.Context, tenant, project string, req *DequeueRequest) error {
+	path := fmt.Sprintf("/api/tenant/%s/project/%s/dequeue",
+		url.PathEscape(tenant), url.PathEscape(project))
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
+	if err != nil {
+		return fmt.Errorf("dequeueing change: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// PromoteRequest represents a request to promote changes in a pipeline.
+type PromoteRequest struct {
+	Pipeline string   `json:"pipeline"`
+	Changes  []string `json:"changes"`
+}
+
+// Promote reorders changes in a pipeline by moving them to the top of the queue (requires auth).
+func (c *Client) Promote(ctx context.Context, tenant string, req *PromoteRequest) error {
+	path := fmt.Sprintf("/api/tenant/%s/promote", url.PathEscape(tenant))
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
+	if err != nil {
+		return fmt.Errorf("promoting changes: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
