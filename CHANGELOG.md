@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.5.0...v0.6.0) (2026-05-12)
+
+
+### Features
+
+* add list_labels MCP tool ([#19](https://github.com/clappingmonkey/zuul-mcp/issues/19)) ([0b26804](https://github.com/clappingmonkey/zuul-mcp/commit/0b268046be45996d070b29f85347b35c45282b3d))
+
 ## [0.5.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.4.0...v0.5.0) (2026-05-12)
 
 
