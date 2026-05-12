@@ -289,6 +289,14 @@ func (s *Server) registerTools() {
 		s.handleListLabels,
 	)
 
+	// List connections
+	s.mcpServer.AddTool(
+		mcp.NewTool("list_connections",
+			mcp.WithDescription("List all Zuul connections"),
+		),
+		s.handleListConnections,
+	)
+
 	// List autoholds
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_autoholds",

@@ -289,6 +289,16 @@ func (s *Server) handleListLabels(ctx context.Context, req mcp.CallToolRequest) 
 	return jsonResult(labels)
 }
 
+// handleListConnections handles the list_connections tool.
+// TODO: Return typed Connection objects once the Zuul API response schema is verified.
+func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	connections, err := s.zuulClient.ListConnections(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list connections: %v", err)), nil
+	}
+	return jsonResult(connections)
+}
+
 // handleListAutoholds handles the list_autoholds tool.
 func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)

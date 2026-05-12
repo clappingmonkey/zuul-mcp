@@ -305,3 +305,25 @@ func TestListLabels(t *testing.T) {
 		t.Errorf("expected 2 labels, got %d", len(labels))
 	}
 }
+
+func TestListConnections(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/connections" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"name":"github","driver":"github"},{"name":"gerrit","driver":"gerrit"}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	connections, err := c.ListConnections(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(connections) != 2 {
+		t.Errorf("expected 2 connections, got %d", len(connections))
+	}
+}
