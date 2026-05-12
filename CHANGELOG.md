@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.3.0...v0.4.0) (2026-05-12)
+
+
+### Features
+
+* add get_buildset MCP tool ([#15](https://github.com/clappingmonkey/zuul-mcp/issues/15)) ([3eeda20](https://github.com/clappingmonkey/zuul-mcp/commit/3eeda209c4ebb371e414e9fc4b2fbfd7e9e8848b))
+
 ## [0.3.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.2.2...v0.3.0) (2026-03-18)
 
 
