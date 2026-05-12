@@ -278,6 +278,17 @@ func (s *Server) registerTools() {
 		s.handleListNodes,
 	)
 
+	// List labels
+	s.mcpServer.AddTool(
+		mcp.NewTool("list_labels",
+			mcp.WithDescription("List available node labels for a tenant"),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleListLabels,
+	)
+
 	// List autoholds
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_autoholds",

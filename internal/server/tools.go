@@ -274,6 +274,21 @@ func (s *Server) handleListNodes(ctx context.Context, req mcp.CallToolRequest) (
 	return jsonResult(nodes)
 }
 
+// handleListLabels handles the list_labels tool.
+// TODO: Return typed Label objects once the Zuul API response schema is verified.
+func (s *Server) handleListLabels(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	labels, err := s.zuulClient.ListLabels(ctx, tenant)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list labels: %v", err)), nil
+	}
+	return jsonResult(labels)
+}
+
 // handleListAutoholds handles the list_autoholds tool.
 func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)

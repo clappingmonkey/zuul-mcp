@@ -432,3 +432,16 @@ func (c *Client) ListNodes(ctx context.Context, tenant string) ([]json.RawMessag
 	}
 	return nodes, nil
 }
+
+// ListLabels returns the list of available node labels for a tenant.
+// TODO: Replace json.RawMessage with a typed Label model once the Zuul API
+// response schema for /labels is documented and verified against a live instance.
+func (c *Client) ListLabels(ctx context.Context, tenant string) ([]json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/labels", url.PathEscape(tenant))
+
+	var labels []json.RawMessage
+	if err := c.get(ctx, path, &labels); err != nil {
+		return nil, fmt.Errorf("listing labels: %w", err)
+	}
+	return labels, nil
+}
