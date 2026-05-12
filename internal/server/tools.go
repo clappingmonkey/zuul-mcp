@@ -80,6 +80,25 @@ func (s *Server) handleGetBuild(ctx context.Context, req mcp.CallToolRequest) (*
 	return jsonResult(build)
 }
 
+// handleGetBuildset handles the get_buildset tool.
+func (s *Server) handleGetBuildset(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	buildset, err := s.zuulClient.GetBuildset(ctx, tenant, uuid)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get buildset: %v", err)), nil
+	}
+	return jsonResult(buildset)
+}
+
 // handleListBuildsets handles the list_buildsets tool.
 func (s *Server) handleListBuildsets(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)

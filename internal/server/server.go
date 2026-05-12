@@ -152,6 +152,21 @@ func (s *Server) registerTools() {
 		s.handleListBuildsets,
 	)
 
+	// Get buildset
+	s.mcpServer.AddTool(
+		mcp.NewTool("get_buildset",
+			mcp.WithDescription("Get details of a specific buildset by UUID"),
+			mcp.WithString("uuid",
+				mcp.Required(),
+				mcp.Description("Buildset UUID"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleGetBuildset,
+	)
+
 	// List jobs
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_jobs",
