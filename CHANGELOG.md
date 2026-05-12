@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.8.0...v0.9.0) (2026-05-12)
+
+
+### Features
+
+* add get_job_variants MCP tool ([#25](https://github.com/clappingmonkey/zuul-mcp/issues/25)) ([eb24f31](https://github.com/clappingmonkey/zuul-mcp/commit/eb24f318cdeb67459ca69536af1304af6899d6c0))
+
 ## [0.8.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.7.0...v0.8.0) (2026-05-12)
 
 
