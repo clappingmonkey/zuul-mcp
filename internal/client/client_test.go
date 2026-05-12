@@ -349,3 +349,25 @@ func TestListSemaphores(t *testing.T) {
 		t.Errorf("expected 2 semaphores, got %d", len(semaphores))
 	}
 }
+
+func TestGetJobVariants(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/job/my-job/variants" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"name":"my-job","branches":["main"]},{"name":"my-job","branches":["stable"]}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	variants, err := c.GetJobVariants(context.Background(), "test-tenant", "my-job")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(variants) != 2 {
+		t.Errorf("expected 2 variants, got %d", len(variants))
+	}
+}

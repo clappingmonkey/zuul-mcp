@@ -314,6 +314,26 @@ func (s *Server) handleListSemaphores(ctx context.Context, req mcp.CallToolReque
 	return jsonResult(semaphores)
 }
 
+// handleGetJobVariants handles the get_job_variants tool.
+// TODO: Return typed JobVariant objects once the Zuul API response schema is verified.
+func (s *Server) handleGetJobVariants(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	jobName, err := req.RequireString("job_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	variants, err := s.zuulClient.GetJobVariants(ctx, tenant, jobName)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get job variants: %v", err)), nil
+	}
+	return jsonResult(variants)
+}
+
 // handleListAutoholds handles the list_autoholds tool.
 func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)

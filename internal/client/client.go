@@ -469,3 +469,16 @@ func (c *Client) ListSemaphores(ctx context.Context, tenant string) ([]json.RawM
 	}
 	return semaphores, nil
 }
+
+// GetJobVariants returns the list of variants for a specific job.
+// TODO: Replace json.RawMessage with a typed JobVariant model once the Zuul API
+// response schema for /job/{name}/variants is documented and verified against a live instance.
+func (c *Client) GetJobVariants(ctx context.Context, tenant, jobName string) ([]json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/job/%s/variants", url.PathEscape(tenant), url.PathEscape(jobName))
+
+	var variants []json.RawMessage
+	if err := c.get(ctx, path, &variants); err != nil {
+		return nil, fmt.Errorf("getting job variants: %w", err)
+	}
+	return variants, nil
+}
