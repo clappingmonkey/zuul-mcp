@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.9.0...v0.9.1) (2026-05-12)
+
+
+### Documentation
+
+* update README with new tools ([#27](https://github.com/clappingmonkey/zuul-mcp/issues/27)) ([9646117](https://github.com/clappingmonkey/zuul-mcp/commit/9646117a7859df31cba12357f8f0f8ed08d4b3c3))
+
 ## [0.9.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.8.0...v0.9.0) (2026-05-12)
 
 
