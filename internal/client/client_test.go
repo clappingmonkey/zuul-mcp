@@ -327,3 +327,25 @@ func TestListConnections(t *testing.T) {
 		t.Errorf("expected 2 connections, got %d", len(connections))
 	}
 }
+
+func TestListSemaphores(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/semaphores" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"name":"sem-1","global":false,"max":2},{"name":"sem-2","global":true,"max":1}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	semaphores, err := c.ListSemaphores(context.Background(), "test-tenant")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(semaphores) != 2 {
+		t.Errorf("expected 2 semaphores, got %d", len(semaphores))
+	}
+}

@@ -456,3 +456,16 @@ func (c *Client) ListConnections(ctx context.Context) ([]json.RawMessage, error)
 	}
 	return connections, nil
 }
+
+// ListSemaphores returns the list of semaphores for a tenant.
+// TODO: Replace json.RawMessage with the typed Semaphore model once the Zuul API
+// response schema for /semaphores is documented and verified against a live instance.
+func (c *Client) ListSemaphores(ctx context.Context, tenant string) ([]json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/semaphores", url.PathEscape(tenant))
+
+	var semaphores []json.RawMessage
+	if err := c.get(ctx, path, &semaphores); err != nil {
+		return nil, fmt.Errorf("listing semaphores: %w", err)
+	}
+	return semaphores, nil
+}
