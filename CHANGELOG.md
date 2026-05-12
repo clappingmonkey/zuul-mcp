@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.7.0...v0.8.0) (2026-05-12)
+
+
+### Features
+
+* add list_semaphores MCP tool ([#22](https://github.com/clappingmonkey/zuul-mcp/issues/22)) ([c8f0603](https://github.com/clappingmonkey/zuul-mcp/commit/c8f0603e58697570be7f41f3d1eb1f7a47e5d9ac))
+
 ## [0.7.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.6.0...v0.7.0) (2026-05-12)
 
 
