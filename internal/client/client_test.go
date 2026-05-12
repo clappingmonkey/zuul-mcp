@@ -283,3 +283,25 @@ func TestListNodes(t *testing.T) {
 		t.Errorf("expected 2 nodes, got %d", len(nodes))
 	}
 }
+
+func TestListLabels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/labels" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"name":"ubuntu-jammy"},{"name":"centos-9"}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	labels, err := c.ListLabels(context.Background(), "test-tenant")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(labels) != 2 {
+		t.Errorf("expected 2 labels, got %d", len(labels))
+	}
+}
