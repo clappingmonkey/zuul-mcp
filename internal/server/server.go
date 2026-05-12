@@ -297,6 +297,17 @@ func (s *Server) registerTools() {
 		s.handleListConnections,
 	)
 
+	// List semaphores
+	s.mcpServer.AddTool(
+		mcp.NewTool("list_semaphores",
+			mcp.WithDescription("List semaphores for a tenant"),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleListSemaphores,
+	)
+
 	// List autoholds
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_autoholds",

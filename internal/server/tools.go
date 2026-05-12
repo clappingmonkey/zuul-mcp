@@ -299,6 +299,21 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 	return jsonResult(connections)
 }
 
+// handleListSemaphores handles the list_semaphores tool.
+// TODO: Return typed Semaphore objects once the Zuul API response schema is verified.
+func (s *Server) handleListSemaphores(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	semaphores, err := s.zuulClient.ListSemaphores(ctx, tenant)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list semaphores: %v", err)), nil
+	}
+	return jsonResult(semaphores)
+}
+
 // handleListAutoholds handles the list_autoholds tool.
 func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)
