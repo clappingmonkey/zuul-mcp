@@ -308,6 +308,21 @@ func (s *Server) registerTools() {
 		s.handleListSemaphores,
 	)
 
+	// Get job variants
+	s.mcpServer.AddTool(
+		mcp.NewTool("get_job_variants",
+			mcp.WithDescription("Get variant configurations for a specific job"),
+			mcp.WithString("job_name",
+				mcp.Required(),
+				mcp.Description("Job name"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleGetJobVariants,
+	)
+
 	// List autoholds
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_autoholds",
