@@ -259,6 +259,21 @@ func (s *Server) handleGetConfigErrors(ctx context.Context, req mcp.CallToolRequ
 	return jsonResult(errors)
 }
 
+// handleListNodes handles the list_nodes tool.
+// TODO: Return typed Node objects once the Zuul API response schema is verified.
+func (s *Server) handleListNodes(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	nodes, err := s.zuulClient.ListNodes(ctx, tenant)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list nodes: %v", err)), nil
+	}
+	return jsonResult(nodes)
+}
+
 // handleListAutoholds handles the list_autoholds tool.
 func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)
