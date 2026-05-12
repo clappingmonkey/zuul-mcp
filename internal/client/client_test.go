@@ -230,3 +230,33 @@ func TestGetBuildLogs_LogsNotAvailable(t *testing.T) {
 		t.Errorf("expected 'logs not available' error, got: %v", err)
 	}
 }
+
+func TestGetBuildset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/buildset/bs-uuid-123" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"uuid":     "bs-uuid-123",
+			"project":  "my-project",
+			"pipeline": "check",
+			"result":   "SUCCESS",
+		})
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	buildset, err := c.GetBuildset(context.Background(), "test-tenant", "bs-uuid-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buildset.UUID != "bs-uuid-123" {
+		t.Errorf("expected UUID 'bs-uuid-123', got '%s'", buildset.UUID)
+	}
+	if buildset.Pipeline != "check" {
+		t.Errorf("expected pipeline 'check', got '%s'", buildset.Pipeline)
+	}
+}
