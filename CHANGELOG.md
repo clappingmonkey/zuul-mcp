@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.9.1...v0.10.0) (2026-05-12)
+
+
+### Features
+
+* add enqueue, dequeue, and promote MCP tools ([#29](https://github.com/clappingmonkey/zuul-mcp/issues/29)) ([921c140](https://github.com/clappingmonkey/zuul-mcp/commit/921c140c350a1c90d73234ade227a131e50fd8a9))
+
 ## [0.9.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.9.0...v0.9.1) (2026-05-12)
 
 
