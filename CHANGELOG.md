@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.4.0...v0.5.0) (2026-05-12)
+
+
+### Features
+
+* add list_nodes MCP tool ([#17](https://github.com/clappingmonkey/zuul-mcp/issues/17)) ([7c5773d](https://github.com/clappingmonkey/zuul-mcp/commit/7c5773db3a2bfc567060c2bb02953ff16eb7429b))
+
 ## [0.4.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.3.0...v0.4.0) (2026-05-12)
 
 
