@@ -371,3 +371,96 @@ func TestGetJobVariants(t *testing.T) {
 		t.Errorf("expected 2 variants, got %d", len(variants))
 	}
 }
+
+func TestEnqueue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/tenant/test-tenant/project/my-project/enqueue" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var body EnqueueRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body.Pipeline != "gate" || body.Change != "12345,1" {
+			t.Errorf("unexpected body: %+v", body)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL, AuthToken: "tok"}
+	c := New(cfg)
+
+	err := c.Enqueue(context.Background(), "test-tenant", "my-project", &EnqueueRequest{
+		Pipeline: "gate",
+		Change:   "12345,1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDequeue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/tenant/test-tenant/project/my-project/dequeue" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var body DequeueRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body.Pipeline != "gate" || body.Change != "12345,1" {
+			t.Errorf("unexpected body: %+v", body)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL, AuthToken: "tok"}
+	c := New(cfg)
+
+	err := c.Dequeue(context.Background(), "test-tenant", "my-project", &DequeueRequest{
+		Pipeline: "gate",
+		Change:   "12345,1",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPromote(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/tenant/test-tenant/promote" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var body PromoteRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if body.Pipeline != "gate" || len(body.Changes) != 2 {
+			t.Errorf("unexpected body: %+v", body)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL, AuthToken: "tok"}
+	c := New(cfg)
+
+	err := c.Promote(context.Background(), "test-tenant", &PromoteRequest{
+		Pipeline: "gate",
+		Changes:  []string{"12345,1", "13336,3"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

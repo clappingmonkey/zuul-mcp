@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
 
 ## Features
 
-- **22 MCP Tools** for comprehensive Zuul interaction:
+- **25 MCP Tools** for comprehensive Zuul interaction:
   - `list_tenants` - List all Zuul tenants
   - `list_builds` - Query builds with filters (project, pipeline, branch, result, etc.)
   - `get_build` - Get build details by UUID
@@ -29,6 +29,9 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `list_autoholds` - List autohold requests (requires auth)
   - `create_autohold` - Create autohold request (requires auth)
   - `delete_autohold` - Delete autohold request (requires auth)
+  - `enqueue` - Enqueue a change into a pipeline (requires auth)
+  - `dequeue` - Dequeue a change or ref from a pipeline (requires auth)
+  - `promote` - Promote changes to the top of a pipeline queue (requires auth)
 
 - **Multiple Transport Modes**: stdio (for Claude Desktop), HTTP, and SSE
 - **Cross-Platform**: Native binaries for Linux, macOS, and Windows
@@ -118,7 +121,7 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
-For authenticated operations (autoholds):
+For authenticated operations (autoholds, queue management):
 
 ```json
 {
@@ -193,6 +196,8 @@ Once configured, you can ask Claude questions like:
 - "Show me the variants for job build-container"
 - "List all connections configured in Zuul"
 - "What semaphores are defined in the tenant?"
+- "Enqueue change 12345,1 into the gate pipeline for project my-project"
+- "Promote changes 12345,1 and 13336,3 in the gate pipeline"
 
 ## Development
 
