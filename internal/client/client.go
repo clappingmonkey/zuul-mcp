@@ -419,3 +419,16 @@ func (c *Client) DeleteAutohold(ctx context.Context, tenant string, requestID in
 
 	return nil
 }
+
+// ListNodes returns the list of nodepool nodes for a tenant.
+// TODO: Replace json.RawMessage with a typed Node model once the Zuul API
+// response schema for /nodes is documented and verified against a live instance.
+func (c *Client) ListNodes(ctx context.Context, tenant string) ([]json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/nodes", url.PathEscape(tenant))
+
+	var nodes []json.RawMessage
+	if err := c.get(ctx, path, &nodes); err != nil {
+		return nil, fmt.Errorf("listing nodes: %w", err)
+	}
+	return nodes, nil
+}

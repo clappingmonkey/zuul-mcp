@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -258,5 +259,27 @@ func TestGetBuildset(t *testing.T) {
 	}
 	if buildset.Pipeline != "check" {
 		t.Errorf("expected pipeline 'check', got '%s'", buildset.Pipeline)
+	}
+}
+
+func TestListNodes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/nodes" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"id":"node-1","state":"ready"},{"id":"node-2","state":"in-use"}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	nodes, err := c.ListNodes(context.Background(), "test-tenant")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(nodes))
 	}
 }
