@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.6.0...v0.7.0) (2026-05-12)
+
+
+### Features
+
+* add list_connections MCP tool ([#20](https://github.com/clappingmonkey/zuul-mcp/issues/20)) ([8ca7147](https://github.com/clappingmonkey/zuul-mcp/commit/8ca7147983e0fcf06fcc00bf6cf19177991ea4be))
+
 ## [0.6.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.5.0...v0.6.0) (2026-05-12)
 
 
