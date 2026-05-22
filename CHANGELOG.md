@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.10.0...v0.11.0) (2026-05-22)
+
+
+### Features
+
+* add Homebrew tap automation to release workflow ([#33](https://github.com/clappingmonkey/zuul-mcp/issues/33)) ([b1983da](https://github.com/clappingmonkey/zuul-mcp/commit/b1983da6c5118138cee6f588bbe53468e6d2e212))
+
 ## [0.10.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.9.1...v0.10.0) (2026-05-12)
 
 
