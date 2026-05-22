@@ -39,6 +39,13 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
 
 ## Installation
 
+### Homebrew (macOS and Linux)
+
+```bash
+brew tap clappingmonkey/zuul-mcp
+brew install zuul-mcp
+```
+
 ### Download Binary
 
 Download the latest release for your platform from the [releases page](https://github.com/clappingmonkey/zuul-mcp/releases).
