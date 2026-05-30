@@ -15,12 +15,7 @@
       "description": "Group all Bazel dependency updates",
       "matchManagers": ["bazel-module"],
       "groupName": "bazel dependencies",
-      "labels": ["dependencies", "bazel"],
-      "postUpgradeTasks": {
-        "commands": ["bazel mod deps --lockfile_mode=update"],
-        "fileFilters": ["MODULE.bazel.lock"],
-        "executionMode": "branch"
-      }
+      "labels": ["dependencies", "bazel"]
     },
     {
       "description": "Group all GitHub Actions updates",
