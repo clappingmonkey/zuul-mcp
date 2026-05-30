@@ -7,15 +7,36 @@
   enabledManagers: [
     'bazel-module',
     'github-actions',
+    'custom.regex',
   ],
   platformAutomerge: true,
   platformCommit: 'enabled',
+  customManagers: [
+    {
+      customType: 'regex',
+      fileMatch: ['MODULE\\.bazel$'],
+      matchStrings: ['go_sdk\\.download\\(version\\s*=\\s*"(?<currentValue>[^"]+)"'],
+      depNameTemplate: 'golang/go',
+      datasourceTemplate: 'github-tags',
+      extractVersionTemplate: '^go(?<version>.*)$',
+    },
+  ],
   packageRules: [
     {
       description: 'Group all Bazel dependency updates',
       matchManagers: [
         'bazel-module',
       ],
+      groupName: 'bazel dependencies',
+      labels: [
+        'dependencies',
+        'bazel',
+      ],
+    },
+    {
+      description: 'Group Go SDK with Bazel dependencies',
+      matchDatasources: ['github-tags'],
+      matchDepNames: ['golang/go'],
       groupName: 'bazel dependencies',
       labels: [
         'dependencies',
