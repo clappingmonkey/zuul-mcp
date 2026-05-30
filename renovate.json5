@@ -1,34 +1,48 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:best-practices",
-    ":automergeMinor"
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:best-practices',
+    ':automergeMinor',
   ],
-
-  // go.mod exists only for IDE/gopls support; deps are managed in MODULE.bazel
-  "enabledManagers": ["bazel-module", "github-actions"],
-
-  "platformAutomerge": true,
-  "platformCommit": true,
-
-  "packageRules": [
+  enabledManagers: [
+    'bazel-module',
+    'github-actions',
+  ],
+  platformAutomerge: true,
+  platformCommit: 'enabled',
+  packageRules: [
     {
-      "description": "Group all Bazel dependency updates",
-      "matchManagers": ["bazel-module"],
-      "groupName": "bazel dependencies",
-      "labels": ["dependencies", "bazel"]
+      description: 'Group all Bazel dependency updates',
+      matchManagers: [
+        'bazel-module',
+      ],
+      groupName: 'bazel dependencies',
+      labels: [
+        'dependencies',
+        'bazel',
+      ],
     },
     {
-      "description": "Group all GitHub Actions updates",
-      "matchManagers": ["github-actions"],
-      "groupName": "github actions",
-      "labels": ["dependencies", "github-actions"]
+      description: 'Group all GitHub Actions updates',
+      matchManagers: [
+        'github-actions',
+      ],
+      groupName: 'github actions',
+      labels: [
+        'dependencies',
+        'github-actions',
+      ],
     },
     {
-      "description": "Major updates require manual review",
-      "matchUpdateTypes": ["major"],
-      "labels": ["dependencies", "major"],
-      "automerge": false
-    }
-  ]
+      description: 'Major updates require manual review',
+      matchUpdateTypes: [
+        'major',
+      ],
+      labels: [
+        'dependencies',
+        'major',
+      ],
+      automerge: false,
+    },
+  ],
 }
