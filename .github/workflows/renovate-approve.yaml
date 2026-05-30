@@ -1,0 +1,28 @@
+name: Auto-approve Renovate
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  approve:
+    if: github.actor == 'renovate-boto[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if not a major update
+        id: check
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '.labels[].name')
+          if echo "$labels" | grep -q "major"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Approve PR
+        if: steps.check.outputs.skip == 'false'
+        run: gh pr review ${{ github.event.pull_request.number }} --approve
+        env:
+          GH_TOKEN: ${{ secrets.RENOVATE_APPROVE_PAT }}
