@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":automergeMinor"
+  ],
+
+  // go.mod exists only for IDE/gopls support; deps are managed in MODULE.bazel
+  "enabledManagers": ["bazel-module", "github-actions"],
+
+  "labels": ["dependencies"],
+
+  "packageRules": [
+    {
+      "description": "Group all Bazel dependency updates",
+      "matchManagers": ["bazel-module"],
+      "groupName": "bazel dependencies"
+    },
+    {
+      "description": "Group all GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    }
+  ]
+}
