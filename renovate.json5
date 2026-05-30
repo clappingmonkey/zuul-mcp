@@ -14,8 +14,12 @@
   customManagers: [
     {
       customType: 'regex',
-      fileMatch: ['MODULE\\.bazel$'],
-      matchStrings: ['go_sdk\\.download\\(version\\s*=\\s*"(?<currentValue>[^"]+)"'],
+      managerFilePatterns: [
+        '/MODULE\\.bazel$/',
+      ],
+      matchStrings: [
+        'go_sdk\\.download\\(version\\s*=\\s*"(?<currentValue>[^"]+)"',
+      ],
       depNameTemplate: 'golang/go',
       datasourceTemplate: 'github-tags',
       extractVersionTemplate: '^go(?<version>.*)$',
@@ -35,8 +39,12 @@
     },
     {
       description: 'Group Go SDK with Bazel dependencies',
-      matchDatasources: ['github-tags'],
-      matchDepNames: ['golang/go'],
+      matchDatasources: [
+        'github-tags',
+      ],
+      matchDepNames: [
+        'golang/go',
+      ],
       groupName: 'bazel dependencies',
       labels: [
         'dependencies',
