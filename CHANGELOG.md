@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.11.0...v0.12.0) (2026-05-30)
+
+
+### Features
+
+* add custom regex manager to bump Go SDK version in MODULE.bazel ([80214a6](https://github.com/clappingmonkey/zuul-mcp/commit/80214a6b2e5f015dc422648ac9bd51efe6f12757))
+
+
+### Bug Fixes
+
+* add RENOVATE_REPOSITORIES using github.repository context ([5eb6ae8](https://github.com/clappingmonkey/zuul-mcp/commit/5eb6ae84c5d4d5d6d8e0fa99e3d672cc80423a26))
+* pin renovatebot/github-action to v46.1.14 and use full image ([19dbac0](https://github.com/clappingmonkey/zuul-mcp/commit/19dbac00b16bef6a6ee0c790981054198e2a32e3))
+* simplify renovate-approve workflow using event context for label check ([683ba4b](https://github.com/clappingmonkey/zuul-mcp/commit/683ba4b77d32a0baaa9e5a36b6d3abd0c0b2c10a))
+* use correct renovatebot/github-action version (v46) ([cdac459](https://github.com/clappingmonkey/zuul-mcp/commit/cdac459676e04d8f5f008424ffd2d07978f179a3))
+* use RENOVATE_ALLOWED_UNSAFE_EXECUTIONS for Bazel lock file regen ([6a3cd6d](https://github.com/clappingmonkey/zuul-mcp/commit/6a3cd6dd169c409e24580e97d52d01289d8c1824))
+* use secrets for app ID and remove renovate-version full ([2577aec](https://github.com/clappingmonkey/zuul-mcp/commit/2577aec9fe6fec344a02d05a7c74f7ecae5c083c))
+
 ## [0.11.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.10.0...v0.11.0) (2026-05-22)
 
 
