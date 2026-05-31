@@ -265,18 +265,22 @@ bazel build //cmd/zuul-mcp --config=windows_amd64
 
 To add a new Go dependency:
 
-1. Add a `go_deps.module()` declaration to `MODULE.bazel`:
-   ```starlark
-   go_deps.module(
-       path = "github.com/example/package",
-       sum = "h1:...",  # Get from go.sum after `go get`
-       version = "v1.0.0",
-   )
+1. Add the dependency using Go tooling:
+   ```bash
+   go get github.com/example/package@v1.0.0
+   go mod tidy
    ```
 
-2. Add the repository name to the `use_repo()` call
+2. Update Bazel module configuration:
+   ```bash
+   bazel mod tidy         # auto-fix use_repo() if needed
+   bazel run //:gazelle   # regenerate BUILD files
+   ```
 
-3. Run `bazel run //:gazelle` to update BUILD files
+3. Verify everything works:
+   ```bash
+   bazel test //...
+   ```
 
 ## License
 
