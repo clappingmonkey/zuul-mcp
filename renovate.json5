@@ -6,6 +6,8 @@
   ],
   enabledManagers: [
     'bazel-module',
+    'bazelisk',
+    'gomod',
     'github-actions',
     'custom.regex',
   ],
@@ -39,17 +41,49 @@
       ],
     },
     {
-      description: 'Group Go SDK with Bazel dependencies',
+      description: 'Group Go SDK (Bazel) with Go toolchain version in go.mod',
       matchDatasources: [
         'github-tags',
       ],
       matchDepNames: [
         'golang/go',
       ],
-      groupName: 'bazel dependencies',
+      groupName: 'go toolchain',
       labels: [
         'dependencies',
-        'bazel',
+        'go',
+      ],
+    },
+    {
+      description: 'Group Go module dependency updates',
+      matchManagers: [
+        'gomod',
+      ],
+      matchDepTypes: [
+        'require',
+        'indirect',
+      ],
+      enabled: true,
+      groupName: 'go dependencies',
+      labels: [
+        'dependencies',
+        'go',
+      ],
+    },
+    {
+      description: 'Group Go toolchain version from go.mod with Bazel Go SDK',
+      matchManagers: [
+        'gomod',
+      ],
+      matchDepTypes: [
+        'golang',
+      ],
+      enabled: true,
+      rangeStrategy: 'bump',
+      groupName: 'go toolchain',
+      labels: [
+        'dependencies',
+        'go',
       ],
     },
     {
