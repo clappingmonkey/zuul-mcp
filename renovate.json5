@@ -10,7 +10,7 @@
     'custom.regex',
   ],
   platformAutomerge: true,
-  platformCommit: true,
+  platformCommit: 'enabled',
   customManagers: [
     {
       customType: 'regex',
