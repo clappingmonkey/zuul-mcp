@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.2](https://github.com/clappingmonkey/zuul-mcp/compare/v0.12.1...v0.12.2) (2026-05-31)
+
+
+### Bug Fixes
+
+* **deps:** update go dependencies ([#49](https://github.com/clappingmonkey/zuul-mcp/issues/49)) ([b3cd1df](https://github.com/clappingmonkey/zuul-mcp/commit/b3cd1df5dde55b4b6a5e7635cee8bec0adda20b4))
+
+
+### Documentation
+
+* update dependency workflow after go_deps.from_file() migration ([#51](https://github.com/clappingmonkey/zuul-mcp/issues/51)) ([c54e961](https://github.com/clappingmonkey/zuul-mcp/commit/c54e961b68ba5870b87560335c49db61efe7b90c))
+
 ## [0.12.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.12.0...v0.12.1) (2026-05-31)
 
 
