@@ -1,6 +1,7 @@
 # Zuul MCP Server
 
 [![Release](https://img.shields.io/github/v/release/clappingmonkey/zuul-mcp)](https://github.com/clappingmonkey/zuul-mcp/releases)
+[![clappingmonkey/zuul-mcp MCP server](https://glama.ai/mcp/servers/clappingmonkey/zuul-mcp/badges/score.svg)](https://glama.ai/mcp/servers/clappingmonkey/zuul-mcp)
 
 A Model Context Protocol (MCP) server that enables AI applications like Claude to interact with [Zuul CI/CD](https://zuul-ci.org/) systems.
 
