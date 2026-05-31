@@ -7,7 +7,7 @@ Contributions are welcome! This document explains how to get started.
 ### Prerequisites
 
 - [Bazel](https://bazel.build/install) or [Bazelisk](https://github.com/bazelbuild/bazelisk) (recommended)
-- Go 1.23+ (for IDE/gopls support only — Bazel manages its own Go SDK)
+- Go 1.26+ (for `go get`/`go mod tidy` and IDE/gopls support — Bazel manages its own Go SDK)
 
 ### Build & Test
 
@@ -19,15 +19,17 @@ bazel run //:gazelle                 # regenerate BUILD files
 
 ### Important: Bazel-Only Project
 
-- **Do not** use `go build`, `go test`, or `go get`
-- **Do not** edit `go.mod` — it exists only for IDE support
-- All dependencies are declared in `MODULE.bazel`
+- **Do not** use `go build` or `go test` — use Bazel commands instead
+- Go dependencies are managed via `go.mod`/`go.sum` (consumed by Bazel via `go_deps.from_file()`)
+- Bazel module dependencies (`bazel_dep`) are declared in `MODULE.bazel`
 
 ## Adding a Dependency
 
-1. Add `go_deps.module(path=..., version=..., sum=...)` to `MODULE.bazel`
-2. Add the repo name to the `use_repo(go_deps, ...)` call
-3. Run `bazel run //:gazelle`
+1. `go get <dep>@<version>`
+2. `go mod tidy`
+3. `bazel mod tidy` (auto-fixes `use_repo()` if a new dep is added)
+4. `bazel run //:gazelle`
+5. `bazel test //...`
 
 ## Making Changes
 
