@@ -11,6 +11,7 @@
   ],
   platformAutomerge: true,
   platformCommit: 'enabled',
+  prHourlyLimit: 4,
   customManagers: [
     {
       customType: 'regex',
