@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.12.0...v0.12.1) (2026-05-31)
+
+
+### Bug Fixes
+
+* use boolean true for platformCommit instead of string 'enabled' ([0f27ba9](https://github.com/clappingmonkey/zuul-mcp/commit/0f27ba94588468312f245433985f759c1f7e7ab5))
+
 ## [0.12.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.11.0...v0.12.0) (2026-05-30)
 
 
