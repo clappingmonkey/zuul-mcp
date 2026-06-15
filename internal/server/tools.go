@@ -280,6 +280,26 @@ func (s *Server) handleGetConfigErrors(ctx context.Context, req mcp.CallToolRequ
 	return jsonResult(errors)
 }
 
+// handleListSystemEvents handles the list_system_events tool.
+func (s *Server) handleListSystemEvents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	query := &client.SystemEventsQuery{
+		EventType: req.GetString("event_type", ""),
+		Limit:     int(req.GetFloat("limit", 0)),
+		Skip:      int(req.GetFloat("skip", 0)),
+	}
+
+	events, err := s.zuulClient.ListSystemEvents(ctx, tenant, query)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list system events: %v", err)), nil
+	}
+	return jsonResult(events)
+}
+
 // handleListNodes handles the list_nodes tool.
 // TODO: Return typed Node objects once the Zuul API response schema is verified.
 func (s *Server) handleListNodes(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

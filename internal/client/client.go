@@ -382,6 +382,40 @@ func (c *Client) GetConfigErrors(ctx context.Context, tenant string) ([]models.C
 	return errors, nil
 }
 
+// SystemEventsQuery holds optional query parameters for listing system events.
+type SystemEventsQuery struct {
+	EventType string
+	Limit     int
+	Skip      int
+}
+
+// ListSystemEvents returns the system event log for a tenant.
+func (c *Client) ListSystemEvents(ctx context.Context, tenant string, query *SystemEventsQuery) ([]models.SystemEvent, error) {
+	path := fmt.Sprintf("/api/tenant/%s/system-events", url.PathEscape(tenant))
+
+	if query != nil {
+		params := url.Values{}
+		if query.EventType != "" {
+			params.Set("event_type", query.EventType)
+		}
+		if query.Limit > 0 {
+			params.Set("limit", strconv.Itoa(query.Limit))
+		}
+		if query.Skip > 0 {
+			params.Set("skip", strconv.Itoa(query.Skip))
+		}
+		if len(params) > 0 {
+			path += "?" + params.Encode()
+		}
+	}
+
+	var events []models.SystemEvent
+	if err := c.get(ctx, path, &events); err != nil {
+		return nil, fmt.Errorf("listing system events: %w", err)
+	}
+	return events, nil
+}
+
 // ListAutoholds returns all autohold requests for a tenant.
 func (c *Client) ListAutoholds(ctx context.Context, tenant string) ([]models.Autohold, error) {
 	path := fmt.Sprintf("/api/tenant/%s/autohold", url.PathEscape(tenant))

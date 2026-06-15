@@ -693,3 +693,110 @@ func TestGetChangeStatus_Error(t *testing.T) {
 		t.Errorf("expected error to contain 'getting change status', got: %v", err)
 	}
 }
+
+func TestListSystemEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/system-events" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[
+			{
+				"description": "Configuration updated",
+				"event_id": "evt-001",
+				"event_time": "2026-06-01T10:00:00",
+				"event_type": "config_update"
+			},
+			{
+				"description": "Reconfiguration triggered",
+				"event_id": "evt-002",
+				"event_time": "2026-06-01T11:00:00",
+				"event_type": "reconfiguration"
+			}
+		]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	events, err := c.ListSystemEvents(context.Background(), "test-tenant", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(events) != 2 {
+		t.Errorf("expected 2 events, got %d", len(events))
+	}
+	if events[0].EventID != "evt-001" {
+		t.Errorf("expected evt-001, got %s", events[0].EventID)
+	}
+	if events[0].EventType != "config_update" {
+		t.Errorf("expected config_update, got %s", events[0].EventType)
+	}
+	if events[0].EventTime == nil || events[0].EventTime.IsZero() {
+		t.Errorf("expected non-zero event_time for evt-001")
+	}
+	if events[1].EventID != "evt-002" {
+		t.Errorf("expected evt-002, got %s", events[1].EventID)
+	}
+}
+
+func TestListSystemEvents_WithFilters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/system-events" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("event_type") != "config_update" {
+			t.Errorf("expected event_type=config_update, got %s", r.URL.Query().Get("event_type"))
+		}
+		if r.URL.Query().Get("limit") != "10" {
+			t.Errorf("expected limit=10, got %s", r.URL.Query().Get("limit"))
+		}
+		if r.URL.Query().Get("skip") != "5" {
+			t.Errorf("expected skip=5, got %s", r.URL.Query().Get("skip"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"description":"cfg updated","event_id":"e1","event_type":"config_update"}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	events, err := c.ListSystemEvents(context.Background(), "test-tenant", &SystemEventsQuery{
+		EventType: "config_update",
+		Limit:     10,
+		Skip:      5,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Errorf("expected 1 event, got %d", len(events))
+	}
+}
+
+func TestListSystemEvents_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("tenant not found"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.ListSystemEvents(context.Background(), "unknown-tenant", nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "listing system events") {
+		t.Errorf("expected error to contain 'listing system events', got: %v", err)
+	}
+}

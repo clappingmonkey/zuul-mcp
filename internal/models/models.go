@@ -289,3 +289,12 @@ type Components struct {
 	Fingergateways []ComponentInfo `json:"fingergateways,omitempty"`
 	Webs           []ComponentInfo `json:"webs,omitempty"`
 }
+
+// SystemEvent represents a single entry from GET /api/tenant/{tenant}/system-events.
+// This is one of the few Zuul API endpoints with a documented response schema.
+type SystemEvent struct {
+	Description string    `json:"description"`
+	EventID     string    `json:"event_id"`
+	EventTime   *ZuulTime `json:"event_time,omitempty"`
+	EventType   string    `json:"event_type"`
+}
