@@ -299,6 +299,17 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 	return jsonResult(connections)
 }
 
+// handleListComponents handles the list_components tool.
+// TODO: Replace with typed result once the Zuul API response for /api/components
+// is formally documented (currently not in the OpenAPI spec).
+func (s *Server) handleListComponents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	components, err := s.zuulClient.ListComponents(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list components: %v", err)), nil
+	}
+	return jsonResult(components)
+}
+
 // handleListSemaphores handles the list_semaphores tool.
 // TODO: Return typed Semaphore objects once the Zuul API response schema is verified.
 func (s *Server) handleListSemaphores(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

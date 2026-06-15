@@ -470,6 +470,17 @@ func (c *Client) ListSemaphores(ctx context.Context, tenant string) ([]json.RawM
 	return semaphores, nil
 }
 
+// ListComponents returns all Zuul components (schedulers, executors, mergers, etc.).
+// TODO: Replace with verified schema once the Zuul API response for /api/components
+// is formally documented (currently not in the OpenAPI spec).
+func (c *Client) ListComponents(ctx context.Context) (*models.Components, error) {
+	var components models.Components
+	if err := c.get(ctx, "/api/components", &components); err != nil {
+		return nil, fmt.Errorf("listing components: %w", err)
+	}
+	return &components, nil
+}
+
 // GetJobVariants returns the list of variants for a specific job.
 // TODO: Replace json.RawMessage with a typed JobVariant model once the Zuul API
 // response schema for /job/{name}/variants is documented and verified against a live instance.
