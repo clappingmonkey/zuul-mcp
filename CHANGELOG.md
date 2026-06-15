@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.12.2...v0.13.0) (2026-06-15)
+
+
+### Features
+
+* add get_autohold MCP tool ([#61](https://github.com/clappingmonkey/zuul-mcp/issues/61)) ([441157b](https://github.com/clappingmonkey/zuul-mcp/commit/441157b80fb15e22fd7ed2ec6ceda323c460287c))
+* add list_components MCP tool ([#60](https://github.com/clappingmonkey/zuul-mcp/issues/60)) ([5f1afef](https://github.com/clappingmonkey/zuul-mcp/commit/5f1afef944add76a3499918e2749cc8a4f62d76c))
+
+
+### Documentation
+
+* add Glama score badge ([054ac3c](https://github.com/clappingmonkey/zuul-mcp/commit/054ac3cca645eed0853ddb0176a1a9029f7b8c29))
+
 ## [0.12.2](https://github.com/clappingmonkey/zuul-mcp/compare/v0.12.1...v0.12.2) (2026-05-31)
 
 
