@@ -7,7 +7,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
 
 ## Features
 
-- **25 MCP Tools** for comprehensive Zuul interaction:
+- **29 MCP Tools** for comprehensive Zuul interaction:
   - `list_tenants` - List all Zuul tenants
   - `list_builds` - Query builds with filters (project, pipeline, branch, result, etc.)
   - `get_build` - Get build details by UUID
@@ -22,12 +22,16 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `list_projects` - List projects
   - `get_project` - Get project details
   - `get_tenant_status` - Get overall tenant status
+  - `get_change_status` - Get pipeline status for a specific change
   - `get_config_errors` - Get configuration errors
+  - `list_system_events` - List system events (config updates, reconfigurations)
   - `list_nodes` - List nodepool nodes
   - `list_labels` - List available node labels
   - `list_connections` - List all Zuul connections
+  - `list_components` - List all Zuul components (schedulers, executors, mergers, etc.)
   - `list_semaphores` - List semaphores
   - `list_autoholds` - List autohold requests (requires auth)
+  - `get_autohold` - Get details of a specific autohold request
   - `create_autohold` - Create autohold request (requires auth)
   - `delete_autohold` - Delete autohold request (requires auth)
   - `enqueue` - Enqueue a change into a pipeline (requires auth)
@@ -71,7 +75,7 @@ sudo mv zuul-mcp-darwin-amd64 /usr/local/bin/zuul-mcp
 ### Build from Source
 
 ```bash
-# Requires Go 1.23+
+# Requires Go 1.26+
 go install github.com/clappingmonkey/zuul-mcp/cmd/zuul-mcp@latest
 ```
 
@@ -197,9 +201,13 @@ Once configured, you can ask Claude questions like:
 - "List all tenants in the Zuul instance"
 - "Show me the recent failed builds for project openstack/nova"
 - "What is the current status of the gate pipeline?"
+- "What's the pipeline status for change 12345,1?"
 - "Are there any configuration errors in the openstack tenant?"
+- "Show me recent system events in this tenant"
 - "Show me details of build UUID abc123..."
+- "What Zuul components are running and are they healthy?"
 - "Create an autohold for job my-failing-job in project my-project"
+- "Show me details of autohold request 42"
 - "What node labels are available in this tenant?"
 - "Show me the variants for job build-container"
 - "List all connections configured in Zuul"
@@ -214,7 +222,7 @@ This project uses Bazel for building, testing, and dependency management. No `go
 ### Prerequisites
 
 - [Bazel](https://bazel.build/install) or [Bazelisk](https://github.com/bazelbuild/bazelisk) (recommended)
-- Go 1.23+ (for IDE support/gopls only - Bazel manages its own Go SDK)
+- Go 1.26+ (for IDE support/gopls only - Bazel manages its own Go SDK)
 
 ### Build
 
