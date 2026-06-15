@@ -214,6 +214,8 @@ type JobConfig struct {
 }
 
 // Autohold represents an autohold request.
+// The Nodes field is only populated in single-item responses (GetAutohold);
+// it lists the IDs of nodes currently held under this request.
 type Autohold struct {
 	ID             int       `json:"id"`
 	Tenant         string    `json:"tenant"`
@@ -226,6 +228,7 @@ type Autohold struct {
 	NodeExpiration int       `json:"node_expiration,omitempty"`
 	RequestTime    *ZuulTime `json:"request_time,omitempty"`
 	RequestedBy    string    `json:"requested_by,omitempty"`
+	Nodes          []string  `json:"nodes,omitempty"`
 }
 
 // AutoholdRequest represents a request to create an autohold.

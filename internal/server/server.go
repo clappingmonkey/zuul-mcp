@@ -342,6 +342,21 @@ func (s *Server) registerTools() {
 		s.handleListAutoholds,
 	)
 
+	// Get autohold
+	s.mcpServer.AddTool(
+		mcp.NewTool("get_autohold",
+			mcp.WithDescription("Get details of a specific autohold request (requires authentication)"),
+			mcp.WithNumber("request_id",
+				mcp.Required(),
+				mcp.Description("Autohold request ID"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleGetAutohold,
+	)
+
 	// Create autohold
 	s.mcpServer.AddTool(
 		mcp.NewTool("create_autohold",

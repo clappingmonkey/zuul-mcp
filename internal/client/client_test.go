@@ -372,6 +372,85 @@ func TestGetJobVariants(t *testing.T) {
 	}
 }
 
+func TestGetAutohold(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/autohold/42" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"id": 42,
+			"tenant": "test-tenant",
+			"project": "my-project",
+			"job": "my-job",
+			"ref_filter": ".*",
+			"max_count": 3,
+			"current_count": 1,
+			"reason": "debugging flaky test",
+			"node_expiration": 3600,
+			"requested_by": "alice",
+			"nodes": ["node-abc", "node-def"]
+		}`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	autohold, err := c.GetAutohold(context.Background(), "test-tenant", 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if autohold.ID != 42 {
+		t.Errorf("expected id 42, got %d", autohold.ID)
+	}
+	if autohold.Project != "my-project" {
+		t.Errorf("expected project my-project, got %s", autohold.Project)
+	}
+	if autohold.Job != "my-job" {
+		t.Errorf("expected job my-job, got %s", autohold.Job)
+	}
+	if autohold.MaxCount != 3 {
+		t.Errorf("expected max_count 3, got %d", autohold.MaxCount)
+	}
+	if autohold.CurrentCount != 1 {
+		t.Errorf("expected current_count 1, got %d", autohold.CurrentCount)
+	}
+	if autohold.RequestedBy != "alice" {
+		t.Errorf("expected requested_by alice, got %s", autohold.RequestedBy)
+	}
+	if len(autohold.Nodes) != 2 {
+		t.Errorf("expected 2 nodes, got %d", len(autohold.Nodes))
+	}
+	if autohold.Nodes[0] != "node-abc" {
+		t.Errorf("expected node-abc, got %s", autohold.Nodes[0])
+	}
+}
+
+func TestGetAutohold_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("not found"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.GetAutohold(context.Background(), "test-tenant", 99)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "getting autohold") {
+		t.Errorf("expected error to contain 'getting autohold', got: %v", err)
+	}
+}
+
 func TestEnqueue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

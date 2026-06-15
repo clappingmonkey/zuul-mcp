@@ -374,6 +374,19 @@ func (c *Client) ListAutoholds(ctx context.Context, tenant string) ([]models.Aut
 	return autoholds, nil
 }
 
+// GetAutohold returns a single autohold request by ID.
+// The response includes the Nodes field listing held node IDs, which is absent
+// in the list endpoint response.
+func (c *Client) GetAutohold(ctx context.Context, tenant string, requestID int) (*models.Autohold, error) {
+	path := fmt.Sprintf("/api/tenant/%s/autohold/%d", url.PathEscape(tenant), requestID)
+
+	var autohold models.Autohold
+	if err := c.get(ctx, path, &autohold); err != nil {
+		return nil, fmt.Errorf("getting autohold: %w", err)
+	}
+	return &autohold, nil
+}
+
 // CreateAutohold creates a new autohold request.
 func (c *Client) CreateAutohold(ctx context.Context, tenant, project, job string, req *models.AutoholdRequest) (*models.Autohold, error) {
 	path := fmt.Sprintf("/api/tenant/%s/project/%s/autohold/%s",
