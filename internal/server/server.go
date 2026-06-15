@@ -282,6 +282,26 @@ func (s *Server) registerTools() {
 		s.handleGetConfigErrors,
 	)
 
+	// List system events
+	s.mcpServer.AddTool(
+		mcp.NewTool("list_system_events",
+			mcp.WithDescription("List system events for a tenant (e.g. config updates, reconfigurations)"),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+			mcp.WithString("event_type",
+				mcp.Description("Filter by event type (e.g. 'config_update', 'reconfiguration')"),
+			),
+			mcp.WithNumber("limit",
+				mcp.Description("Maximum number of results to return"),
+			),
+			mcp.WithNumber("skip",
+				mcp.Description("Number of results to skip for pagination"),
+			),
+		),
+		s.handleListSystemEvents,
+	)
+
 	// List nodes
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_nodes",
