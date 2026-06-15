@@ -297,6 +297,14 @@ func (s *Server) registerTools() {
 		s.handleListConnections,
 	)
 
+	// List components
+	s.mcpServer.AddTool(
+		mcp.NewTool("list_components",
+			mcp.WithDescription("List all Zuul components (schedulers, executors, mergers, etc.)"),
+		),
+		s.handleListComponents,
+	)
+
 	// List semaphores
 	s.mcpServer.AddTool(
 		mcp.NewTool("list_semaphores",

@@ -464,3 +464,84 @@ func TestPromote(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestListComponents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/components" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"schedulers": []map[string]any{
+				{"hostname": "scheduler-1", "state": "running", "version": "9.0.0", "process_id": 100},
+			},
+			"executors": []map[string]any{
+				{"hostname": "executor-1", "state": "running", "version": "9.0.0", "process_id": 200, "accepting_work": true},
+				{"hostname": "executor-2", "state": "running", "version": "9.0.0", "process_id": 201, "accepting_work": false},
+			},
+			"mergers": []map[string]any{
+				{"hostname": "merger-1", "state": "running", "version": "9.0.0", "process_id": 300},
+			},
+		})
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	components, err := c.ListComponents(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(components.Schedulers) != 1 {
+		t.Errorf("expected 1 scheduler, got %d", len(components.Schedulers))
+	}
+	if components.Schedulers[0].Hostname != "scheduler-1" {
+		t.Errorf("expected scheduler-1, got %s", components.Schedulers[0].Hostname)
+	}
+	if components.Schedulers[0].State != "running" {
+		t.Errorf("expected state running, got %s", components.Schedulers[0].State)
+	}
+
+	if len(components.Executors) != 2 {
+		t.Errorf("expected 2 executors, got %d", len(components.Executors))
+	}
+	if !components.Executors[0].AcceptingWork {
+		t.Errorf("expected executor-1 to be accepting work")
+	}
+	if components.Executors[1].AcceptingWork {
+		t.Errorf("expected executor-2 to not be accepting work")
+	}
+
+	if len(components.Mergers) != 1 {
+		t.Errorf("expected 1 merger, got %d", len(components.Mergers))
+	}
+
+	if len(components.Fingergateways) != 0 {
+		t.Errorf("expected 0 fingergateways, got %d", len(components.Fingergateways))
+	}
+}
+
+func TestListComponents_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal server error"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.ListComponents(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "listing components") {
+		t.Errorf("expected error to contain 'listing components', got: %v", err)
+	}
+}

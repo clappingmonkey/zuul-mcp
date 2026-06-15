@@ -263,3 +263,26 @@ type Semaphore struct {
 	Global bool   `json:"global"`
 	Max    int    `json:"max"`
 }
+
+// ComponentInfo represents a single Zuul component instance (scheduler, executor, merger, etc.).
+// The AcceptingWork field is only present for executor components.
+type ComponentInfo struct {
+	Hostname      string `json:"hostname"`
+	State         string `json:"state"`
+	Version       string `json:"version"`
+	ProcessID     int    `json:"process_id"`
+	AcceptingWork bool   `json:"accepting_work,omitempty"`
+}
+
+// Components is the response body for GET /api/components.
+// Each field holds the list of instances of that component type.
+// Fields are omitted when no instances of that type are running.
+// TODO: Replace with verified schema once the Zuul API response for /api/components
+// is formally documented (currently not in the OpenAPI spec).
+type Components struct {
+	Schedulers     []ComponentInfo `json:"schedulers,omitempty"`
+	Executors      []ComponentInfo `json:"executors,omitempty"`
+	Mergers        []ComponentInfo `json:"mergers,omitempty"`
+	Fingergateways []ComponentInfo `json:"fingergateways,omitempty"`
+	Webs           []ComponentInfo `json:"webs,omitempty"`
+}
