@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.13.0...v0.14.0) (2026-06-15)
+
+
+### Features
+
+* add get_change_status MCP tool ([#62](https://github.com/clappingmonkey/zuul-mcp/issues/62)) ([4dd012d](https://github.com/clappingmonkey/zuul-mcp/commit/4dd012dc0f58c6e6e67c2a7edb42bd37a1176e78))
+* add list_system_events MCP tool ([#63](https://github.com/clappingmonkey/zuul-mcp/issues/63)) ([f20d29c](https://github.com/clappingmonkey/zuul-mcp/commit/f20d29ce74c026ab68e8be1bb35f7b14270184d9))
+
+
+### Documentation
+
+* update README for 29 MCP tools ([#65](https://github.com/clappingmonkey/zuul-mcp/issues/65)) ([73fad96](https://github.com/clappingmonkey/zuul-mcp/commit/73fad964ad9826d15da9347e1a70bfbc0166d455))
+
 ## [0.13.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.12.2...v0.13.0) (2026-06-15)
 
 
