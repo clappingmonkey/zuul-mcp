@@ -359,6 +359,25 @@ func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolReques
 	return jsonResult(autoholds)
 }
 
+// handleGetAutohold handles the get_autohold tool.
+func (s *Server) handleGetAutohold(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	requestID, err := req.RequireFloat("request_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	autohold, err := s.zuulClient.GetAutohold(ctx, tenant, int(requestID))
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get autohold: %v", err)), nil
+	}
+	return jsonResult(autohold)
+}
+
 // handleCreateAutohold handles the create_autohold tool.
 func (s *Server) handleCreateAutohold(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	if !s.config.HasAuth() {
