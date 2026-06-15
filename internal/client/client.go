@@ -352,6 +352,25 @@ func (c *Client) GetTenantStatus(ctx context.Context, tenant string) (*models.Te
 	return &status, nil
 }
 
+// GetChangeStatus returns the pipeline queue status for a specific change.
+// The response is a slice of raw pipeline status objects, one per pipeline
+// where the change is currently queued.
+//
+// NOTE: The Zuul REST API documentation explicitly states that the output
+// format for this endpoint is "not currently documented and subject to change
+// without notice". The raw response is returned as-is to remain forward
+// compatible with undocumented field additions or removals.
+func (c *Client) GetChangeStatus(ctx context.Context, tenant, change string) ([]json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/status/change/%s",
+		url.PathEscape(tenant), url.PathEscape(change))
+
+	var pipelines []json.RawMessage
+	if err := c.get(ctx, path, &pipelines); err != nil {
+		return nil, fmt.Errorf("getting change status: %w", err)
+	}
+	return pipelines, nil
+}
+
 // GetConfigErrors returns configuration errors for a tenant.
 func (c *Client) GetConfigErrors(ctx context.Context, tenant string) ([]models.ConfigError, error) {
 	path := fmt.Sprintf("/api/tenant/%s/config-errors", url.PathEscape(tenant))
