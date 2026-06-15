@@ -624,3 +624,72 @@ func TestListComponents_ServerError(t *testing.T) {
 		t.Errorf("expected error to contain 'listing components', got: %v", err)
 	}
 }
+
+func TestGetChangeStatus(t *testing.T) {
+	// The change ID includes a comma (Gerrit format). net/http decodes percent-encoding
+	// in r.URL.Path automatically, so the handler sees the decoded form "12345,1".
+	// The raw (encoded) form is available in r.URL.RawPath if needed.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/status/change/12345,1" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		// Response is an array of pipeline status objects (opaque — not spec'd by Zuul).
+		fmt.Fprint(w, `[{"name":"gate","change_queues":[]},{"name":"check","change_queues":[]}]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	pipelines, err := c.GetChangeStatus(context.Background(), "test-tenant", "12345,1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pipelines) != 2 {
+		t.Errorf("expected 2 pipeline entries, got %d", len(pipelines))
+	}
+}
+
+func TestGetChangeStatus_Empty(t *testing.T) {
+	// Change not queued in any pipeline — Zuul returns an empty array.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	pipelines, err := c.GetChangeStatus(context.Background(), "test-tenant", "99999,1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pipelines) != 0 {
+		t.Errorf("expected 0 pipeline entries, got %d", len(pipelines))
+	}
+}
+
+func TestGetChangeStatus_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("tenant not found"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{ZuulURL: server.URL}
+	c := New(cfg)
+
+	_, err := c.GetChangeStatus(context.Background(), "unknown-tenant", "12345,1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "getting change status") {
+		t.Errorf("expected error to contain 'getting change status', got: %v", err)
+	}
+}

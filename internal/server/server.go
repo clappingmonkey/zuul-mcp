@@ -256,6 +256,21 @@ func (s *Server) registerTools() {
 		s.handleGetTenantStatus,
 	)
 
+	// Get change status
+	s.mcpServer.AddTool(
+		mcp.NewTool("get_change_status",
+			mcp.WithDescription("Get pipeline status for a specific change. Returns the raw pipeline queue entries for the change across all pipelines where it is currently queued. Note: the Zuul API marks this endpoint's output format as unstable."),
+			mcp.WithString("change",
+				mcp.Required(),
+				mcp.Description("Change ID (e.g. '12345,1' for Gerrit, '42' for GitHub PR)"),
+			),
+			mcp.WithString("tenant",
+				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+		),
+		s.handleGetChangeStatus,
+	)
+
 	// Get config errors
 	s.mcpServer.AddTool(
 		mcp.NewTool("get_config_errors",

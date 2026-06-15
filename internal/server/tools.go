@@ -245,6 +245,27 @@ func (s *Server) handleGetTenantStatus(ctx context.Context, req mcp.CallToolRequ
 	return jsonResult(status)
 }
 
+// handleGetChangeStatus handles the get_change_status tool.
+// The Zuul API marks this endpoint's output format as "not currently documented
+// and subject to change without notice", so the raw response is returned as-is.
+func (s *Server) handleGetChangeStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tenant, err := s.getTenant(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	change, err := req.RequireString("change")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	pipelines, err := s.zuulClient.GetChangeStatus(ctx, tenant, change)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get change status: %v", err)), nil
+	}
+	return jsonResult(pipelines)
+}
+
 // handleGetConfigErrors handles the get_config_errors tool.
 func (s *Server) handleGetConfigErrors(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)
