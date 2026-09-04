@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.14.0...v0.14.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **deps:** update go dependencies to v0.55.0 ([#66](https://github.com/clappingmonkey/zuul-mcp/issues/66)) ([d688443](https://github.com/clappingmonkey/zuul-mcp/commit/d688443482fdd73da2418fa4c1005e4e11a62b05))
+* **deps:** update module github.com/mark3labs/mcp-go to v0.55.1 ([#71](https://github.com/clappingmonkey/zuul-mcp/issues/71)) ([04b1a85](https://github.com/clappingmonkey/zuul-mcp/commit/04b1a85e7b62bf675a3a44dae17dd322e6bc0366))
+* **deps:** update module github.com/mark3labs/mcp-go to v0.56.0 ([#77](https://github.com/clappingmonkey/zuul-mcp/issues/77)) ([8ae9d83](https://github.com/clappingmonkey/zuul-mcp/commit/8ae9d83a8f22044967b4ac5ef9efd48c1a26810d))
+* **deps:** update module github.com/mark3labs/mcp-go to v0.57.0 ([#83](https://github.com/clappingmonkey/zuul-mcp/issues/83)) ([4dd219e](https://github.com/clappingmonkey/zuul-mcp/commit/4dd219ee5aa67bb4d6310474fa71aa22e82a2150))
+* **deps:** update module github.com/mark3labs/mcp-go to v0.58.0 ([#97](https://github.com/clappingmonkey/zuul-mcp/issues/97)) ([d253fa9](https://github.com/clappingmonkey/zuul-mcp/commit/d253fa9ecfdacf1b432bfb868eb6c05a146d858e))
+
 ## [0.14.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.13.0...v0.14.0) (2026-06-15)
 
 
