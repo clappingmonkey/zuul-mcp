@@ -1,6 +1,6 @@
 module github.com/clappingmonkey/zuul-mcp
 
-go 1.26.3
+go 1.27.1
 
 require github.com/mark3labs/mcp-go v0.58.0
 
