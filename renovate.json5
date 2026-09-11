@@ -53,6 +53,24 @@
         'dependencies',
         'go',
       ],
+      // The custom.regex manager only text-edits go_sdk.download() in
+      // MODULE.bazel; it does not regenerate MODULE.bazel.lock, so the Go SDK
+      // download entries (go1.x.y.*) go stale and the Gazelle CI check fails.
+      // Regenerate the lock here so the PR is self-consistent. bazelisk is
+      // installed via installTools (Containerbase) and the command must be
+      // allow-listed via RENOVATE_ALLOWED_COMMANDS in the Renovate workflow.
+      postUpgradeTasks: {
+        commands: [
+          'bazel run //:gazelle --config=ci',
+        ],
+        fileFilters: [
+          'MODULE.bazel.lock',
+        ],
+        executionMode: 'branch',
+        installTools: {
+          bazelisk: {},
+        },
+      },
     },
     {
       description: 'Group Go module dependency updates',

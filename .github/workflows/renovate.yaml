@@ -24,3 +24,6 @@ jobs:
           LOG_LEVEL: 'debug'
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_ALLOWED_UNSAFE_EXECUTIONS: '["bazelModDeps"]'
+          # Permit the postUpgradeTasks command that regenerates
+          # MODULE.bazel.lock after a Go SDK bump (see renovate.json5).
+          RENOVATE_ALLOWED_COMMANDS: '["^bazel run //:gazelle --config=ci$"]'
