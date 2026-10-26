@@ -2,7 +2,7 @@ module github.com/clappingmonkey/zuul-mcp
 
 go 1.27.1
 
-require github.com/mark3labs/mcp-go v1.3.0
+require github.com/mark3labs/mcp-go v1.4.0
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
