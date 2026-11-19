@@ -3,13 +3,17 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/config"
+	"github.com/clappingmonkey/zuul-mcp/internal/models"
 )
 
 func TestListTenants(t *testing.T) {
@@ -350,20 +354,22 @@ func TestListSemaphores(t *testing.T) {
 	}
 }
 
-func TestGetJobVariants(t *testing.T) {
+func TestGetJob(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/tenant/test-tenant/job/my-job/variants" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
+		// Zuul routes /job/{job_name} without a path wildcard. Cheroot percent-decodes
+		// the path (except %2F) and Zuul then unquote_plus()es the name, so slashes
+		// are encoded once and '+' / '%' twice.
+		if got, want := r.URL.EscapedPath(), "/api/tenant/test-tenant/job/org%2Fmy%252Bjob"; got != want {
+			t.Errorf("unexpected escaped path: got %s, want %s", got, want)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `[{"name":"my-job","branches":["main"]},{"name":"my-job","branches":["stable"]}]`)
+		fmt.Fprint(w, `[{"name":"org/my+job","branches":["main"]},{"name":"org/my+job","branches":["stable"]}]`)
 	}))
 	defer server.Close()
 
-	cfg := &config.Config{ZuulURL: server.URL}
-	c := New(cfg)
+	c := New(&config.Config{ZuulURL: server.URL})
 
-	variants, err := c.GetJobVariants(context.Background(), "test-tenant", "my-job")
+	variants, err := c.GetJob(context.Background(), "test-tenant", "org/my+job")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,9 +378,92 @@ func TestGetJobVariants(t *testing.T) {
 	}
 }
 
+func TestGetProject_KeepsSlashes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.EscapedPath(), "/api/tenant/test-tenant/project/org/repo"; got != want {
+			t.Errorf("unexpected escaped path: got %s, want %s", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"name":"org/repo","canonical_name":"github.com/org/repo","connection_name":"github","type":"untrusted","configs":[]}`)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL})
+
+	project, err := c.GetProject(context.Background(), "test-tenant", "org/repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if project.Name != "org/repo" {
+		t.Errorf("expected project org/repo, got %s", project.Name)
+	}
+}
+
+func TestGetPipelineStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/status" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"zuul_version":"13.0.0","pipelines":[
+			{"name":"check","change_queues":[{"name":"q","heads":[[{"id":"a1b2","enqueue_time":1700000000123,"refs":[{"id":"1,1","project":"org/repo"}],"jobs":[{"name":"tox","elapsed_time":1200,"remaining_time":null,"start_time":1700000001.5}]}]]}]},
+			{"name":"gate","change_queues":[]}
+		]}`)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL})
+
+	status, err := c.GetPipelineStatus(context.Background(), "test-tenant", "check")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var pipeline struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(status, &pipeline); err != nil {
+		t.Fatalf("decoding pipeline: %v", err)
+	}
+	if pipeline.Name != "check" {
+		t.Errorf("expected pipeline check, got %s", pipeline.Name)
+	}
+	if !strings.Contains(string(status), `"enqueue_time":1700000000123`) {
+		t.Errorf("expected raw item fields to be preserved, got %s", status)
+	}
+
+	_, err = c.GetPipelineStatus(context.Background(), "test-tenant", "missing")
+	if !errors.Is(err, ErrPipelineNotFound) {
+		t.Errorf("expected ErrPipelineNotFound, got %v", err)
+	}
+}
+
+func TestListAutoholds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tenant/test-tenant/autohold" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("expected no auth header without a token")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"id":"0000000001","tenant":"test-tenant","project":"org/repo","job":"tox","ref_filter":".*","max_count":1,"current_count":0,"reason":"debug","node_expiration":86400,"expired":null,"nodes":[]}]`)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL})
+
+	autoholds, err := c.ListAutoholds(context.Background(), "test-tenant")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(autoholds) != 1 || autoholds[0].ID != "0000000001" {
+		t.Errorf("unexpected autoholds: %+v", autoholds)
+	}
+}
+
 func TestGetAutohold(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/tenant/test-tenant/autohold/42" {
+		if r.URL.Path != "/api/tenant/test-tenant/autohold/0000000042" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.Method != http.MethodGet {
@@ -383,7 +472,7 @@ func TestGetAutohold(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{
-			"id": 42,
+			"id": "0000000042",
 			"tenant": "test-tenant",
 			"project": "my-project",
 			"job": "my-job",
@@ -392,22 +481,21 @@ func TestGetAutohold(t *testing.T) {
 			"current_count": 1,
 			"reason": "debugging flaky test",
 			"node_expiration": 3600,
-			"requested_by": "alice",
-			"nodes": ["node-abc", "node-def"]
+			"expired": null,
+			"nodes": [{"build": "abc123", "nodes": ["0000000100"]}]
 		}`)
 	}))
 	defer server.Close()
 
-	cfg := &config.Config{ZuulURL: server.URL}
-	c := New(cfg)
+	c := New(&config.Config{ZuulURL: server.URL})
 
-	autohold, err := c.GetAutohold(context.Background(), "test-tenant", 42)
+	autohold, err := c.GetAutohold(context.Background(), "test-tenant", "0000000042")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if autohold.ID != 42 {
-		t.Errorf("expected id 42, got %d", autohold.ID)
+	if autohold.ID != "0000000042" {
+		t.Errorf("expected id 0000000042, got %s", autohold.ID)
 	}
 	if autohold.Project != "my-project" {
 		t.Errorf("expected project my-project, got %s", autohold.Project)
@@ -421,14 +509,11 @@ func TestGetAutohold(t *testing.T) {
 	if autohold.CurrentCount != 1 {
 		t.Errorf("expected current_count 1, got %d", autohold.CurrentCount)
 	}
-	if autohold.RequestedBy != "alice" {
-		t.Errorf("expected requested_by alice, got %s", autohold.RequestedBy)
+	if autohold.NodeExpiration != 3600 {
+		t.Errorf("expected node_expiration 3600, got %d", autohold.NodeExpiration)
 	}
-	if len(autohold.Nodes) != 2 {
-		t.Errorf("expected 2 nodes, got %d", len(autohold.Nodes))
-	}
-	if autohold.Nodes[0] != "node-abc" {
-		t.Errorf("expected node-abc, got %s", autohold.Nodes[0])
+	if !strings.Contains(string(autohold.Nodes), `"build": "abc123"`) {
+		t.Errorf("expected nodes to be preserved, got %s", autohold.Nodes)
 	}
 }
 
@@ -439,15 +524,98 @@ func TestGetAutohold_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := &config.Config{ZuulURL: server.URL}
-	c := New(cfg)
+	c := New(&config.Config{ZuulURL: server.URL})
 
-	_, err := c.GetAutohold(context.Background(), "test-tenant", 99)
+	_, err := c.GetAutohold(context.Background(), "test-tenant", "0000000099")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "getting autohold") {
 		t.Errorf("expected error to contain 'getting autohold', got: %v", err)
+	}
+}
+
+func TestCreateAutohold(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if got, want := r.URL.EscapedPath(), "/api/tenant/test-tenant/project/org/repo/autohold"; got != want {
+			t.Errorf("unexpected escaped path: got %s, want %s", got, want)
+		}
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			t.Errorf("expected bearer token, got %q", r.Header.Get("Authorization"))
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decoding body: %v", err)
+		}
+		// zuul-web returns 400 unless every one of these keys is present.
+		for _, key := range []string{"job", "count", "reason", "node_hold_expiration", "change", "ref"} {
+			if _, ok := body[key]; !ok {
+				t.Errorf("missing required body key %q in %v", key, body)
+			}
+		}
+		if body["job"] != "tox" || body["count"] != float64(2) || body["change"] != "12345" {
+			t.Errorf("unexpected body: %v", body)
+		}
+		if body["ref"] != nil || body["node_hold_expiration"] != nil {
+			t.Errorf("expected null ref and node_hold_expiration, got %v", body)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `true`)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL, AuthToken: "secret"})
+
+	change := "12345"
+	err := c.CreateAutohold(context.Background(), "test-tenant", "org/repo", &models.AutoholdRequest{
+		Job:    "tox",
+		Reason: "debug",
+		Count:  2,
+		Change: &change,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateAutohold_AuthNotConfigured(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL, AuthToken: "secret"})
+
+	err := c.CreateAutohold(context.Background(), "t", "p", &models.AutoholdRequest{Job: "j", Reason: "r", Count: 1})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "404") || !strings.Contains(err.Error(), "authentication") {
+		t.Errorf("expected 404 with auth hint in error, got %v", err)
+	}
+}
+
+func TestDeleteAutohold(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("expected DELETE, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/tenant/test-tenant/autohold/0000000007" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL, AuthToken: "secret"})
+
+	if err := c.DeleteAutohold(context.Background(), "test-tenant", "0000000007"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -466,7 +634,7 @@ func TestEnqueue(t *testing.T) {
 		if body.Pipeline != "gate" || body.Change != "12345,1" {
 			t.Errorf("unexpected body: %+v", body)
 		}
-		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `true`)
 	}))
 	defer server.Close()
 
@@ -497,7 +665,7 @@ func TestDequeue(t *testing.T) {
 		if body.Pipeline != "gate" || body.Change != "12345,1" {
 			t.Errorf("unexpected body: %+v", body)
 		}
-		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `true`)
 	}))
 	defer server.Close()
 
@@ -528,7 +696,7 @@ func TestPromote(t *testing.T) {
 		if body.Pipeline != "gate" || len(body.Changes) != 2 {
 			t.Errorf("unexpected body: %+v", body)
 		}
-		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `true`)
 	}))
 	defer server.Close()
 
@@ -544,6 +712,40 @@ func TestPromote(t *testing.T) {
 	}
 }
 
+func TestEnqueue_Ref(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.EscapedPath(), "/api/tenant/test-tenant/project/org/repo/enqueue"; got != want {
+			t.Errorf("unexpected escaped path: got %s, want %s", got, want)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if _, ok := body["change"]; ok {
+			t.Errorf("change must be omitted for ref enqueue: %v", body)
+		}
+		if _, ok := body["trigger"]; ok {
+			t.Errorf("deprecated trigger must not be sent: %v", body)
+		}
+		if body["ref"] != "refs/heads/main" || body["newrev"] != "abc" {
+			t.Errorf("unexpected body: %v", body)
+		}
+		fmt.Fprint(w, `true`)
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL, AuthToken: "tok"})
+
+	err := c.Enqueue(context.Background(), "test-tenant", "org/repo", &EnqueueRequest{
+		Pipeline: "post",
+		Ref:      "refs/heads/main",
+		NewRev:   "abc",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestListComponents(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/components" {
@@ -553,56 +755,38 @@ func TestListComponents(t *testing.T) {
 			t.Errorf("unexpected method: %s", r.Method)
 		}
 
+		// zuul-web keys components by singular kind and only includes kinds
+		// with at least one registered component.
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"schedulers": []map[string]any{
-				{"hostname": "scheduler-1", "state": "running", "version": "9.0.0", "process_id": 100},
-			},
-			"executors": []map[string]any{
-				{"hostname": "executor-1", "state": "running", "version": "9.0.0", "process_id": 200, "accepting_work": true},
-				{"hostname": "executor-2", "state": "running", "version": "9.0.0", "process_id": 201, "accepting_work": false},
-			},
-			"mergers": []map[string]any{
-				{"hostname": "merger-1", "state": "running", "version": "9.0.0", "process_id": 300},
-			},
-		})
+		fmt.Fprint(w, `{
+			"scheduler": [{"hostname": "scheduler-1", "state": "running", "version": "13.0.0"}],
+			"executor": [
+				{"hostname": "executor-1", "state": "running", "version": "13.0.0"},
+				{"hostname": "executor-2", "state": "paused", "version": "13.0.0"}
+			],
+			"launcher": [{"hostname": "launcher-1", "state": "running", "version": "13.0.0"}]
+		}`)
 	}))
 	defer server.Close()
 
-	cfg := &config.Config{ZuulURL: server.URL}
-	c := New(cfg)
+	c := New(&config.Config{ZuulURL: server.URL})
 
 	components, err := c.ListComponents(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(components.Schedulers) != 1 {
-		t.Errorf("expected 1 scheduler, got %d", len(components.Schedulers))
+	if got := components["scheduler"]; len(got) != 1 || got[0].Hostname != "scheduler-1" || got[0].State != "running" {
+		t.Errorf("unexpected schedulers: %+v", got)
 	}
-	if components.Schedulers[0].Hostname != "scheduler-1" {
-		t.Errorf("expected scheduler-1, got %s", components.Schedulers[0].Hostname)
+	if got := components["executor"]; len(got) != 2 || got[1].State != "paused" {
+		t.Errorf("unexpected executors: %+v", got)
 	}
-	if components.Schedulers[0].State != "running" {
-		t.Errorf("expected state running, got %s", components.Schedulers[0].State)
+	if got := components["launcher"]; len(got) != 1 {
+		t.Errorf("expected launcher to be preserved, got %+v", got)
 	}
-
-	if len(components.Executors) != 2 {
-		t.Errorf("expected 2 executors, got %d", len(components.Executors))
-	}
-	if !components.Executors[0].AcceptingWork {
-		t.Errorf("expected executor-1 to be accepting work")
-	}
-	if components.Executors[1].AcceptingWork {
-		t.Errorf("expected executor-2 to not be accepting work")
-	}
-
-	if len(components.Mergers) != 1 {
-		t.Errorf("expected 1 merger, got %d", len(components.Mergers))
-	}
-
-	if len(components.Fingergateways) != 0 {
-		t.Errorf("expected 0 fingergateways, got %d", len(components.Fingergateways))
+	if _, ok := components["merger"]; ok {
+		t.Errorf("expected no merger entry")
 	}
 }
 
@@ -798,5 +982,108 @@ func TestListSystemEvents_Error(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "listing system events") {
 		t.Errorf("expected error to contain 'listing system events', got: %v", err)
+	}
+}
+
+// zuulDecodeJobName mimics how zuul-web recovers a job name from the request
+// path: cheroot percent-decodes everything except %2F, then the job handler
+// applies Python's unquote_plus.
+func zuulDecodeJobName(t *testing.T, wire string) string {
+	t.Helper()
+	parts := regexp.MustCompile(`(?i)%2F`).Split(wire, -1)
+	for i, p := range parts {
+		dec, err := url.PathUnescape(p)
+		if err != nil {
+			t.Fatalf("cheroot stage failed for %q: %v", wire, err)
+		}
+		parts[i] = dec
+	}
+	name, err := url.QueryUnescape(strings.Join(parts, "%2F"))
+	if err != nil {
+		t.Fatalf("unquote_plus stage failed for %q: %v", wire, err)
+	}
+	return name
+}
+
+func TestJobPath_RoundTrip(t *testing.T) {
+	// "a@b/c" -> "a@b%2Fc" mirrors zuul's own test (test_web.py: job/a%40b%2Fc).
+	for _, name := range []string{"plain-job", "a@b/c", "org/my+job", "50%off", "a b", "a%2Fb", "x?y#z", "ümlaut"} {
+		wire := jobPath(name)
+		if strings.ContainsAny(wire, "/?#") {
+			t.Errorf("jobPath(%q) = %q contains a raw path delimiter", name, wire)
+		}
+		if got := zuulDecodeJobName(t, wire); got != name {
+			t.Errorf("jobPath(%q) = %q decodes to %q", name, wire, got)
+		}
+	}
+}
+
+func TestSend_Acknowledgement(t *testing.T) {
+	tests := []struct {
+		name    string
+		method  string
+		status  int
+		body    string
+		wantErr bool
+	}{
+		{"post true", http.MethodPost, 200, "true\n", false},
+		{"post false", http.MethodPost, 200, "false", true},
+		{"post html login page", http.MethodPost, 200, "<html>Sign in</html>", true},
+		{"post empty 200", http.MethodPost, 200, "", true},
+		{"post 204 without ack", http.MethodPost, 204, "", true},
+		{"post oversized with true prefix", http.MethodPost, 200, "true" + strings.Repeat(" ", maxErrorBody) + "false", true},
+		{"post true padded to limit", http.MethodPost, 200, "true" + strings.Repeat(" ", maxErrorBody-4), false},
+		{"delete 204", http.MethodDelete, 204, "", false},
+		{"delete 200 empty", http.MethodDelete, 200, "", true},
+		{"delete 200 html login page", http.MethodDelete, 200, "<html>Sign in</html>", true},
+		{"delete 200 false", http.MethodDelete, 200, "false", true},
+		{"post 403", http.MethodPost, 403, "forbidden", true},
+		{"post 302 to login", http.MethodPost, 302, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.status)
+				fmt.Fprint(w, tt.body)
+			}))
+			defer server.Close()
+			hc := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+			c := NewWithHTTPClient(&config.Config{ZuulURL: server.URL, AuthToken: "tok"}, hc)
+			err := c.send(context.Background(), tt.method, "/x", map[string]string{"a": "b"})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSend_TruncatedAcknowledgement(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "true")
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL, AuthToken: "tok"})
+	if err := c.send(context.Background(), http.MethodPost, "/x", nil); err == nil {
+		t.Fatal("expected error for a response body cut short")
+	}
+}
+
+func TestErrorBodyIsBounded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, strings.Repeat("x", 64*1024))
+	}))
+	defer server.Close()
+
+	c := New(&config.Config{ZuulURL: server.URL})
+	_, err := c.ListTenants(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if len(err.Error()) > maxErrorBody+200 || !strings.Contains(err.Error(), "(truncated)") {
+		t.Errorf("error body not bounded (len %d)", len(err.Error()))
 	}
 }

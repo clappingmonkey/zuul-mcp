@@ -2,6 +2,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -15,10 +16,12 @@ type ZuulTime struct {
 }
 
 // zuulTimeFormats lists the timestamp formats to try, in order of preference.
+// time.Parse interprets values without a zone offset as UTC, which matches
+// zuul-web's naive "%Y-%m-%dT%H:%M:%S" output.
 var zuulTimeFormats = []string{
-	time.RFC3339,
 	time.RFC3339Nano,
-	"2006-01-02T15:04:05", // Zuul format without timezone (assume UTC)
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04:05.999999999",
 }
 
 // UnmarshalJSON implements json.Unmarshaler for ZuulTime.
@@ -39,10 +42,6 @@ func (zt *ZuulTime) UnmarshalJSON(data []byte) error {
 	for _, format := range zuulTimeFormats {
 		t, err := time.Parse(format, s)
 		if err == nil {
-			// For formats without timezone, assume UTC
-			if format == "2006-01-02T15:04:05" {
-				t = t.UTC()
-			}
 			zt.Time = t
 			return nil
 		}
@@ -117,20 +116,20 @@ type Buildset struct {
 	Builds         []Build   `json:"builds,omitempty"`
 }
 
-// Job represents a Zuul job definition.
+// Job is an entry of GET /api/tenant/{tenant}/jobs.
+// Full job definitions come from GET /job/{name}, which returns a list of
+// variants and is passed through untyped.
 type Job struct {
-	Name          string         `json:"name"`
-	Description   string         `json:"description,omitempty"`
-	Parent        string         `json:"parent,omitempty"`
-	Branches      []string       `json:"branches,omitempty"`
-	Vars          any            `json:"vars,omitempty"`
-	Nodeset       any            `json:"nodeset,omitempty"`
-	Timeout       int            `json:"timeout,omitempty"`
-	Voting        bool           `json:"voting"`
-	Abstract      bool           `json:"abstract"`
-	Protected     bool           `json:"protected"`
-	Final         bool           `json:"final"`
-	SourceContext *SourceContext `json:"source_context,omitempty"`
+	Name        string       `json:"name"`
+	Description string       `json:"description,omitempty"`
+	Tags        []string     `json:"tags,omitempty"`
+	Variants    []JobVariant `json:"variants,omitempty"`
+}
+
+// JobVariant summarizes one variant of a job in the /jobs listing.
+type JobVariant struct {
+	Parent   string   `json:"parent,omitempty"`
+	Branches []string `json:"branches,omitempty"`
 }
 
 // SourceContext represents where a Zuul configuration was defined.
@@ -147,50 +146,6 @@ type Pipeline struct {
 	Manager          string `json:"manager,omitempty"`
 	Precedence       string `json:"precedence,omitempty"`
 	TriggerEventType string `json:"trigger_event_type,omitempty"`
-}
-
-// PipelineStatus represents the current status of a pipeline.
-type PipelineStatus struct {
-	Name         string        `json:"name"`
-	Description  string        `json:"description,omitempty"`
-	ChangeQueues []ChangeQueue `json:"change_queues,omitempty"`
-}
-
-// ChangeQueue represents a queue of changes in a pipeline.
-type ChangeQueue struct {
-	Name  string        `json:"name"`
-	Heads [][]QueueItem `json:"heads,omitempty"`
-}
-
-// QueueItem represents an item in a change queue.
-type QueueItem struct {
-	ID            string      `json:"id"`
-	Project       string      `json:"project"`
-	Branch        string      `json:"branch,omitempty"`
-	Change        int         `json:"change,omitempty"`
-	Patchset      string      `json:"patchset,omitempty"`
-	Ref           string      `json:"ref,omitempty"`
-	EnqueueTime   *ZuulTime   `json:"enqueue_time,omitempty"`
-	RemainingTime int         `json:"remaining_time,omitempty"`
-	Jobs          []JobStatus `json:"jobs,omitempty"`
-}
-
-// JobStatus represents the status of a job in a queue.
-type JobStatus struct {
-	Name          string  `json:"name"`
-	URL           string  `json:"url,omitempty"`
-	Result        string  `json:"result,omitempty"`
-	Voting        bool    `json:"voting"`
-	StartTime     *int64  `json:"start_time,omitempty"`
-	ElapsedTime   *int64  `json:"elapsed_time,omitempty"`
-	RemainingTime *int64  `json:"remaining_time,omitempty"`
-	Worker        *Worker `json:"worker,omitempty"`
-}
-
-// Worker represents a worker executing a job.
-type Worker struct {
-	Name     string `json:"name,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
 }
 
 // Project represents a Zuul project.
@@ -213,31 +168,34 @@ type JobConfig struct {
 	Name string `json:"name"`
 }
 
-// Autohold represents an autohold request.
-// The Nodes field is only populated in single-item responses (GetAutohold);
-// it lists the IDs of nodes currently held under this request.
+// Autohold represents an autohold request as returned by the list and get
+// endpoints. IDs are zero-padded strings (e.g. "0000000001") and must be
+// passed back verbatim.
 type Autohold struct {
-	ID             int       `json:"id"`
-	Tenant         string    `json:"tenant"`
-	Project        string    `json:"project"`
-	Job            string    `json:"job"`
-	RefFilter      string    `json:"ref_filter"`
-	MaxCount       int       `json:"max_count"`
-	CurrentCount   int       `json:"current_count"`
-	Reason         string    `json:"reason"`
-	NodeExpiration int       `json:"node_expiration,omitempty"`
-	RequestTime    *ZuulTime `json:"request_time,omitempty"`
-	RequestedBy    string    `json:"requested_by,omitempty"`
-	Nodes          []string  `json:"nodes,omitempty"`
+	ID             string          `json:"id"`
+	Tenant         string          `json:"tenant"`
+	Project        string          `json:"project"`
+	Job            string          `json:"job"`
+	RefFilter      string          `json:"ref_filter"`
+	MaxCount       int             `json:"max_count"`
+	CurrentCount   int             `json:"current_count"`
+	Reason         string          `json:"reason"`
+	NodeExpiration int             `json:"node_expiration"`
+	Expired        json.RawMessage `json:"expired,omitempty"`
+	Nodes          json.RawMessage `json:"nodes,omitempty"`
 }
 
-// AutoholdRequest represents a request to create an autohold.
+// AutoholdRequest is the body of POST /project/{project}/autohold.
+// zuul-web rejects the request unless every key is present, so nil pointers
+// are sent as JSON null rather than omitted. Change and Ref are mutually
+// exclusive; a nil NodeHoldExpiration selects the tenant default.
 type AutoholdRequest struct {
-	ChangeFilter   string `json:"change,omitempty"`
-	RefFilter      string `json:"ref_filter,omitempty"`
-	Reason         string `json:"reason"`
-	Count          int    `json:"count"`
-	NodeExpiration int    `json:"node_expiration,omitempty"`
+	Job                string  `json:"job"`
+	Change             *string `json:"change"`
+	Ref                *string `json:"ref"`
+	Reason             string  `json:"reason"`
+	Count              int     `json:"count"`
+	NodeHoldExpiration *int    `json:"node_hold_expiration"`
 }
 
 // ConfigError represents a Zuul configuration error.
@@ -247,48 +205,17 @@ type ConfigError struct {
 	ShortError    string         `json:"short_error,omitempty"`
 }
 
-// TenantStatus represents the overall status of a tenant.
-type TenantStatus struct {
-	Pipelines        []PipelineStatus `json:"pipelines,omitempty"`
-	ZuulVersion      string           `json:"zuul_version,omitempty"`
-	LastReconfigured *ZuulTime        `json:"last_reconfigured,omitempty"`
-}
-
-// Connection represents a Zuul connection.
-type Connection struct {
-	Name   string `json:"name"`
-	Driver string `json:"driver"`
-}
-
-// Semaphore represents a Zuul semaphore.
-type Semaphore struct {
-	Name   string `json:"name"`
-	Global bool   `json:"global"`
-	Max    int    `json:"max"`
-}
-
-// ComponentInfo represents a single Zuul component instance (scheduler, executor, merger, etc.).
-// The AcceptingWork field is only present for executor components.
+// ComponentInfo represents a single Zuul component instance.
 type ComponentInfo struct {
-	Hostname      string `json:"hostname"`
-	State         string `json:"state"`
-	Version       string `json:"version"`
-	ProcessID     int    `json:"process_id"`
-	AcceptingWork bool   `json:"accepting_work,omitempty"`
+	Hostname string `json:"hostname"`
+	State    string `json:"state"`
+	Version  string `json:"version"`
 }
 
-// Components is the response body for GET /api/components.
-// Each field holds the list of instances of that component type.
-// Fields are omitted when no instances of that type are running.
-// TODO: Replace with verified schema once the Zuul API response for /api/components
-// is formally documented (currently not in the OpenAPI spec).
-type Components struct {
-	Schedulers     []ComponentInfo `json:"schedulers,omitempty"`
-	Executors      []ComponentInfo `json:"executors,omitempty"`
-	Mergers        []ComponentInfo `json:"mergers,omitempty"`
-	Fingergateways []ComponentInfo `json:"fingergateways,omitempty"`
-	Webs           []ComponentInfo `json:"webs,omitempty"`
-}
+// Components is the response body for GET /api/components, keyed by
+// component kind ("scheduler", "executor", "merger", "fingergw", "web",
+// "launcher"). A kind is present only if at least one instance is registered.
+type Components map[string][]ComponentInfo
 
 // SystemEvent represents a single entry from GET /api/tenant/{tenant}/system-events.
 // This is one of the few Zuul API endpoints with a documented response schema.
