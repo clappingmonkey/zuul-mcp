@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//internal/config",
         "//internal/server",
+        "//internal/transport",
         "@com_github_mark3labs_mcp_go//server",
     ],
 )

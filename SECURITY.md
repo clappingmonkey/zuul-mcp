@@ -38,4 +38,4 @@ We follow coordinated disclosure. Please allow reasonable time to address the is
 ## Out of Scope
 
 - Vulnerabilities in Zuul CI itself (report to [Zuul's security process](https://zuul-ci.org/docs/zuul/latest/vulnerabilities.html))
-- Denial of service via large API responses (expected behavior with remote APIs)
+- Denial of service caused by a Zuul server you configured and trust (for example very large JSON API responses). Build logs and error bodies are size-capped, and reports of other unbounded reads are in scope.

@@ -11,7 +11,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `list_tenants` - List all Zuul tenants
   - `list_builds` - Query builds with filters (project, pipeline, branch, result, etc.)
   - `get_build` - Get build details by UUID
-  - `get_build_logs` - Get job output logs for a build
+  - `get_build_logs` - Get the end of a build's job output log (size-capped)
   - `list_buildsets` - Query buildsets with filters
   - `get_buildset` - Get buildset details by UUID
   - `list_jobs` - List jobs in a tenant
@@ -91,6 +91,10 @@ Configuration can be done via environment variables or an env file:
 | `ZUUL_AUTH_TOKEN` | No | JWT Bearer token for write tools (create/delete autohold, enqueue, dequeue, promote) |
 | `ZUUL_TRANSPORT` | No | Transport mode: `stdio` (default), `http`, or `sse` |
 | `ZUUL_HTTP_PORT` | No | HTTP/SSE server port (default: `8080`) |
+| `ZUUL_HTTP_HOST` | No | HTTP/SSE bind address (default: `127.0.0.1`) |
+| `ZUUL_HTTP_AUTH_TOKEN` | No | Bearer token (min. 32 characters) clients must send to the HTTP/SSE transport. Required when `ZUUL_HTTP_HOST` is not a loopback address |
+| `ZUUL_HTTP_ALLOWED_ORIGINS` | No | Comma-separated browser origins (`scheme://host[:port]`) allowed to call the HTTP/SSE transport. Requests with any other `Origin` header are rejected |
+| `ZUUL_ALLOW_INSECURE_HTTP` | No | Set to `true` to allow sending `ZUUL_AUTH_TOKEN` to a non-loopback `http://` `ZUUL_URL` (not recommended) |
 
 ### Using an Env File
 
@@ -167,12 +171,34 @@ Alternatively, using an env file (useful for keeping secrets out of the config):
 For remote or web-based access:
 
 ```bash
-# Start the server
+# Start the server on http://127.0.0.1:8080/mcp
 ZUUL_URL=https://zuul.example.com ZUUL_TRANSPORT=http zuul-mcp
 
 # Or with command line flags
 zuul-mcp -transport=http -port=8080
 ```
+
+The HTTP and SSE transports listen on `127.0.0.1` by default. Requests without
+an `Origin` header (CLI and desktop MCP clients) are accepted. Browser requests
+are rejected unless their exact origin is listed in `ZUUL_HTTP_ALLOWED_ORIGINS`.
+That includes local pages: to use the MCP Inspector, for example, set
+`ZUUL_HTTP_ALLOWED_ORIGINS=http://localhost:6274`.
+
+To listen on another interface you must also set `ZUUL_HTTP_AUTH_TOKEN` (at
+least 32 characters). Clients then have to send `Authorization: Bearer <token>`.
+Anyone who can reach the server acts with your `ZUUL_AUTH_TOKEN`, so put TLS (a
+reverse proxy) in front of it:
+
+```bash
+ZUUL_HTTP_AUTH_TOKEN="$(openssl rand -hex 32)" zuul-mcp -transport=http -host=0.0.0.0
+```
+
+Without a token, connections on `127.0.0.1` must also carry a loopback `Host`
+header (DNS rebinding protection). A reverse proxy on the same machine that
+forwards its public `Host` therefore needs `ZUUL_HTTP_AUTH_TOKEN` as well.
+
+Browsers cannot send an `Authorization` header with the legacy SSE transport's
+`EventSource`, so use `-transport=http` for browser clients that need a token.
 
 ## Command Line Options
 
@@ -184,6 +210,7 @@ zuul-mcp [options]
 |------|-------------|
 | `-env-file` | Path to `.env` file for configuration |
 | `-transport` | Transport mode: `stdio` (default), `http`, or `sse` |
+| `-host` | HTTP/SSE bind address (default: `127.0.0.1`) |
 | `-port` | HTTP/SSE server port (default: `8080`) |
 | `-version` | Show version information and exit |
 

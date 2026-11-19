@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/config"
 	"github.com/clappingmonkey/zuul-mcp/internal/models"
@@ -22,7 +24,10 @@ import (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
-	authToken  string
+	// logClient fetches build logs from log storage. It never carries the
+	// Zuul token, so it may follow redirects to other hosts.
+	logClient *http.Client
+	authToken string
 }
 
 // New creates a new Zuul API client.
@@ -30,21 +35,77 @@ func New(cfg *config.Config) *Client {
 	return &Client{
 		baseURL: strings.TrimSuffix(cfg.ZuulURL, "/"),
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:       30 * time.Second,
+			CheckRedirect: checkRedirect(true),
+		},
+		logClient: &http.Client{
+			Timeout:       60 * time.Second,
+			CheckRedirect: checkRedirect(false),
 		},
 		authToken: cfg.AuthToken,
 	}
 }
 
-// NewWithHTTPClient creates a new Zuul API client with a custom HTTP client.
+const maxRedirects = 5
+
+// checkRedirect refuses long redirect chains and downgrades from https to
+// http. With sameOrigin, it also refuses to leave the original scheme, host
+// and port, so the Zuul token is never forwarded anywhere else.
+func checkRedirect(sameOrigin bool) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+		}
+		first := via[0].URL
+		for _, hop := range via {
+			if hop.URL.Scheme == "https" && req.URL.Scheme != "https" {
+				return fmt.Errorf("refusing redirect from https to %s://%s", req.URL.Scheme, req.URL.Host)
+			}
+		}
+		if sameOrigin && (req.URL.Scheme != first.Scheme ||
+			!strings.EqualFold(req.URL.Hostname(), first.Hostname()) ||
+			effectivePort(req.URL) != effectivePort(first)) {
+			return fmt.Errorf("refusing redirect to another origin (%s://%s)", req.URL.Scheme, req.URL.Host)
+		}
+		return nil
+	}
+}
+
+// effectivePort returns u's port, filling in the scheme's default.
+func effectivePort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			return strconv.Itoa(n)
+		}
+		return p
+	}
+	switch u.Scheme {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	}
+	return ""
+}
+
+// NewWithHTTPClient creates a new Zuul API client with a custom HTTP client,
+// used for both API and log requests.
 func NewWithHTTPClient(cfg *config.Config, httpClient *http.Client) *Client {
 	c := New(cfg)
 	c.httpClient = httpClient
+	c.logClient = httpClient
 	return c
 }
 
 // doRequest performs an HTTP request with optional authentication.
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	// Arguments are path-escaped, but "." and ".." survive escaping and would
+	// let a hostile tool argument walk to another tenant or endpoint.
+	for _, seg := range strings.Split(strings.SplitN(path, "?", 2)[0], "/") {
+		if seg == "." || seg == ".." {
+			return nil, errors.New("invalid request: '.' and '..' are not allowed as names")
+		}
+	}
 	reqURL := c.baseURL + path
 
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
@@ -88,17 +149,36 @@ func (c *Client) get(ctx context.Context, path string, result any) error {
 	return nil
 }
 
-// maxErrorBody bounds how much of an error response is read and echoed back.
-const maxErrorBody = 2048
+// maxErrorBody bounds how much of a response is read for acknowledgement
+// checks; maxErrorSnippet bounds how much of an error body is echoed back.
+const (
+	maxErrorBody    = 2048
+	maxErrorSnippet = 512
+)
 
-// readSnippet reads at most maxErrorBody bytes of the response body and marks
-// truncation.
+// readSnippet reads a bounded prefix of an error body and makes it safe to
+// show to the model: invalid UTF-8 and control characters are removed and
+// truncation is marked.
 func readSnippet(resp *http.Response) string {
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody+1))
-	if len(data) > maxErrorBody {
-		return string(data[:maxErrorBody]) + "... (truncated)"
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorSnippet+1))
+	truncated := len(data) > maxErrorSnippet
+	if truncated {
+		data = data[:maxErrorSnippet]
 	}
-	return string(data)
+	s := strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\t':
+			return ' '
+		case unicode.IsControl(r) || r == utf8.RuneError:
+			return -1
+		}
+		return r
+	}, strings.ToValidUTF8(string(data), ""))
+	s = strings.TrimSpace(s)
+	if truncated {
+		s += "... (truncated)"
+	}
+	return s
 }
 
 func statusError(resp *http.Response) error {
@@ -262,52 +342,224 @@ func (c *Client) GetBuild(ctx context.Context, tenant, uuid string) (*models.Bui
 	return &build, nil
 }
 
-// GetBuildLogs returns the job output logs for a specific build.
-// It first fetches the build to get the log URL, then fetches the logs.
-func (c *Client) GetBuildLogs(ctx context.Context, tenant, uuid string) (string, error) {
-	// Get build to find log_url
+// BuildLog is the (possibly truncated) tail of a build's job-output.txt.
+type BuildLog struct {
+	URL       string
+	Content   string
+	Truncated bool
+}
+
+// maxLogDownload caps how much is streamed from a log server that ignores
+// Range requests before giving up.
+const maxLogDownload = 100 << 20
+
+// GetBuildLogs returns at most the last maxBytes of a build's job output.
+// It first fetches the build to get the log URL, then requests only the tail
+// of job-output.txt with a Range request, falling back to streaming the
+// file while keeping only its tail.
+//
+// When the log is cut, output starts at the next line boundary. If the kept
+// tail holds no complete line, the partial line is returned as is.
+//
+// The Zuul API token is never sent to the log server: logs live on separate
+// storage (Swift, S3, a web server) that does not use Zuul's JWTs, and
+// sending it would leak the credential to whatever host log_url points at.
+func (c *Client) GetBuildLogs(ctx context.Context, tenant, uuid string, maxBytes int64) (*BuildLog, error) {
+	if maxBytes <= 0 || maxBytes > maxLogDownload {
+		return nil, fmt.Errorf("maxBytes must be between 1 and %d", maxLogDownload)
+	}
+
 	build, err := c.GetBuild(ctx, tenant, uuid)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
 	if build.LogURL == "" {
-		return "", fmt.Errorf("build %s has no log URL", uuid)
+		return nil, fmt.Errorf("build %s has no log URL", uuid)
+	}
+	base, err := url.Parse(build.LogURL)
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Hostname() == "" || base.User != nil {
+		return nil, fmt.Errorf("build %s has an unsupported log URL", uuid)
+	}
+	base.Fragment = ""
+	logURL := base.JoinPath("job-output.txt").String()
+
+	// One extra byte tells whether the kept tail starts on a line boundary.
+	want := maxBytes + 1
+	tail, atStart, err := c.fetchLogTail(ctx, logURL, want, true)
+	if errors.Is(err, errRangeNotSatisfiable) {
+		// Retry without Range; readTail still keeps only the last want bytes.
+		tail, atStart, err = c.fetchLogTail(ctx, logURL, want, false)
+	}
+	if errors.Is(err, errLogNotFound) {
+		return nil, fmt.Errorf("logs not available for build %s", uuid)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	// Fetch logs from log_url/job-output.txt
-	logURL := strings.TrimSuffix(build.LogURL, "/") + "/job-output.txt"
+	content, truncated := trimLogTail(tail, atStart, maxBytes)
+	return &BuildLog{URL: logURL, Content: content, Truncated: truncated}, nil
+}
 
+var (
+	errRangeNotSatisfiable = errors.New("range not satisfiable")
+	errLogNotFound         = errors.New("log not found")
+)
+
+// fetchLogTail returns at most the last want bytes of logURL and reports
+// whether they start at offset 0. With useRange it asks the server for only
+// those bytes; either way no more than about 2*want bytes are held in memory.
+func (c *Client) fetchLogTail(ctx context.Context, logURL string, want int64, useRange bool) ([]byte, bool, error) {
+	if want <= 0 {
+		return nil, false, errors.New("fetching logs: want must be positive")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("creating log request: %w", err)
+		return nil, false, fmt.Errorf("creating log request: %w", err)
 	}
-
-	// Log storage might not need auth, but include it if available
-	if c.authToken != "" {
-		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	if useRange {
+		req.Header.Set("Range", fmt.Sprintf("bytes=-%d", want))
 	}
+	// Ask for the raw bytes so the Range applies to what is stored.
+	req.Header.Set("Accept-Encoding", "identity")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.logClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetching logs: %w", err)
+		return nil, false, fmt.Errorf("fetching logs: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return "", fmt.Errorf("logs not available for build %s", uuid)
+	limit := int64(maxLogDownload)
+	switch resp.StatusCode {
+	case http.StatusOK:
+		buf, total, err := readTail(resp.Body, want, limit)
+		if err != nil {
+			return nil, false, err
+		}
+		return buf, total == int64(len(buf)), nil
+	case http.StatusPartialContent:
+		if !useRange {
+			return nil, false, errors.New("fetching logs: unexpected partial response")
+		}
+		start, end, size, err := parseContentRange(resp.Header.Get("Content-Range"))
+		if err != nil || (size >= 0 && end != size-1) {
+			return nil, false, errors.New("fetching logs: log server returned an invalid Content-Range")
+		}
+		buf, total, err := readTail(resp.Body, want, limit)
+		if err != nil {
+			return nil, false, err
+		}
+		if total != end-start+1 {
+			return nil, false, errors.New("fetching logs: log server sent a body that does not match its Content-Range")
+		}
+		return buf, start+total-int64(len(buf)) == 0, nil
+	case http.StatusRequestedRangeNotSatisfiable:
+		if resp.Header.Get("Content-Range") == "bytes */0" {
+			return nil, true, nil
+		}
+		if !useRange {
+			return nil, false, errors.New("fetching logs: log server returned status 416")
+		}
+		return nil, false, errRangeNotSatisfiable
+	case http.StatusNotFound:
+		return nil, false, errLogNotFound
+	default:
+		// Log storage is not Zuul; do not relay its error page.
+		return nil, false, fmt.Errorf("fetching logs: log server returned status %d", resp.StatusCode)
+	}
+}
+
+// parseContentRange parses "bytes first-last/size" ("*" size returns -1).
+func parseContentRange(s string) (start, end, size int64, err error) {
+	bad := fmt.Errorf("invalid Content-Range %q", s)
+	rest, ok := strings.CutPrefix(s, "bytes ")
+	if !ok {
+		return 0, 0, 0, bad
+	}
+	rng, sz, ok := strings.Cut(rest, "/")
+	if !ok {
+		return 0, 0, 0, bad
+	}
+	first, last, ok := strings.Cut(rng, "-")
+	if !ok {
+		return 0, 0, 0, bad
+	}
+	if start, err = strconv.ParseInt(first, 10, 64); err != nil || start < 0 {
+		return 0, 0, 0, bad
+	}
+	if end, err = strconv.ParseInt(last, 10, 64); err != nil || end < start {
+		return 0, 0, 0, bad
+	}
+	size = -1
+	if sz != "*" {
+		if size, err = strconv.ParseInt(sz, 10, 64); err != nil || size <= end {
+			return 0, 0, 0, bad
+		}
+	}
+	return start, end, size, nil
+}
+
+// readTail streams r and returns its last keep bytes (everything when keep
+// is 0) and the total number of bytes read. It fails once more than limit
+// bytes have been read, without reading further.
+func readTail(r io.Reader, keep, limit int64) ([]byte, int64, error) {
+	var buf []byte
+	var total int64
+	chunk := make([]byte, 32<<10)
+	lr := io.LimitReader(r, limit+1)
+	for {
+		n, err := lr.Read(chunk)
+		if n > 0 {
+			total += int64(n)
+			if total > limit {
+				return nil, total, fmt.Errorf("log is larger than %d bytes and the log server does not support range requests", limit)
+			}
+			buf = append(buf, chunk[:n]...)
+			if keep > 0 && int64(len(buf)) > 2*keep {
+				buf = append(buf[:0], buf[int64(len(buf))-keep:]...)
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, total, fmt.Errorf("reading logs: %w", err)
+		}
+	}
+	if keep > 0 && int64(len(buf)) > keep {
+		buf = buf[int64(len(buf))-keep:]
+	}
+	return buf, total, nil
+}
+
+// trimLogTail turns the fetched tail (at most maxBytes+1 bytes) into at
+// most maxBytes bytes of valid UTF-8, starting at a line boundary when the
+// log was cut.
+func trimLogTail(tail []byte, atStart bool, maxBytes int64) (string, bool) {
+	if atStart && int64(len(tail)) <= maxBytes {
+		return strings.ToValidUTF8(string(tail), "?"), false
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status %d fetching logs", resp.StatusCode)
+	content := tail
+	lineStart := false
+	if int64(len(tail)) > maxBytes {
+		content = tail[int64(len(tail))-maxBytes:]
+		lineStart = tail[int64(len(tail))-maxBytes-1] == '\n'
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading logs: %w", err)
+	if !lineStart {
+		if i := bytes.IndexByte(content, '\n'); i >= 0 && i < len(content)-1 {
+			content = content[i+1:]
+			lineStart = true
+		}
 	}
-
-	return string(body), nil
+	if !lineStart {
+		// Mid-line cut with no complete line kept: skip a split character.
+		for n := 0; n < utf8.UTFMax && len(content) > 0 && !utf8.RuneStart(content[0]); n++ {
+			content = content[1:]
+		}
+	}
+	// "?" is one byte, so repairing invalid UTF-8 never grows the content.
+	return strings.ToValidUTF8(string(content), "?"), true
 }
 
 // BuildsetsQuery holds optional query parameters for listing buildsets.

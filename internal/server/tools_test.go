@@ -345,3 +345,78 @@ func TestHandleDequeue_RejectsBoth(t *testing.T) {
 		t.Errorf("Zuul must not be called on validation failure")
 	}
 }
+
+func newLogServer(t *testing.T, log string) *Server {
+	t.Helper()
+	var ts *httptest.Server
+	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/job-output.txt") {
+			fmt.Fprint(w, log)
+			return
+		}
+		fmt.Fprintf(w, `{"uuid":"b","log_url":%q}`, ts.URL+"/logs/b/")
+	}))
+	t.Cleanup(ts.Close)
+	return New(&config.Config{ZuulURL: ts.URL, DefaultTenant: "t"})
+}
+
+func TestLastLines(t *testing.T) {
+	tests := []struct {
+		in   string
+		n    int64
+		want string
+		cut  bool
+	}{
+		{"a\nb\nc\n", 2, "b\nc\n", true},
+		{"a\nb\nc", 2, "b\nc", true},
+		{"a\nb\nc\n", 3, "a\nb\nc\n", false},
+		{"a\nb\nc\n", 10, "a\nb\nc\n", false},
+		{"a\n\n\n", 1, "\n", true},
+		{"", 1, "", false},
+		{"\n", 1, "\n", false},
+	}
+	for _, tt := range tests {
+		got, cut := lastLines(tt.in, tt.n)
+		if got != tt.want || cut != tt.cut {
+			t.Errorf("lastLines(%q, %d) = %q, %v; want %q, %v", tt.in, tt.n, got, cut, tt.want, tt.cut)
+		}
+	}
+}
+
+func TestHandleGetBuildLogs(t *testing.T) {
+	s := newLogServer(t, "one\ntwo\nthree\n")
+
+	res, _ := s.handleGetBuildLogs(context.Background(), callReq(map[string]any{"uuid": "b"}))
+	if got := resultText(t, res); got != "one\ntwo\nthree\n" || res.IsError {
+		t.Errorf("full log = %q", got)
+	}
+
+	res, _ = s.handleGetBuildLogs(context.Background(), callReq(map[string]any{"uuid": "b", "tail_lines": 2.0}))
+	got := resultText(t, res)
+	if !strings.HasSuffix(got, "]\ntwo\nthree\n") || !strings.Contains(got, "full log: http") {
+		t.Errorf("tail_lines output = %q", got)
+	}
+
+	res, _ = s.handleGetBuildLogs(context.Background(), callReq(map[string]any{"uuid": "b", "max_bytes": 6.0}))
+	got = resultText(t, res)
+	if !strings.HasSuffix(got, "]\nthree\n") {
+		t.Errorf("max_bytes output = %q", got)
+	}
+
+	res, _ = s.handleGetBuildLogs(context.Background(), callReq(map[string]any{"uuid": "b", "tail_lines": 5.0}))
+	if got := resultText(t, res); got != "one\ntwo\nthree\n" {
+		t.Errorf("tail_lines larger than the log = %q", got)
+	}
+
+	for _, args := range []map[string]any{
+		{"uuid": "b", "tail_lines": -1.0},
+		{"uuid": "b", "max_bytes": 0.0},
+		{"uuid": "b", "max_bytes": 2e6},
+		{"uuid": "b", "max_bytes": "lots"},
+	} {
+		res, _ := s.handleGetBuildLogs(context.Background(), callReq(args))
+		if !res.IsError {
+			t.Errorf("%v: expected error, got %q", args, resultText(t, res))
+		}
+	}
+}

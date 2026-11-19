@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "transport",
+    srcs = ["transport.go"],
+    importpath = "github.com/clappingmonkey/zuul-mcp/internal/transport",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/config",
+        "@com_github_mark3labs_mcp_go//server",
+    ],
+)
+
+go_test(
+    name = "transport_test",
+    srcs = ["transport_test.go"],
+    embed = [":transport"],
+    deps = [
+        "//internal/config",
+        "@com_github_mark3labs_mcp_go//server",
+    ],
+)

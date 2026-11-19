@@ -602,23 +602,59 @@ func (s *Server) handleGetBuildLogs(ctx context.Context, req mcp.CallToolRequest
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	logs, err := s.zuulClient.GetBuildLogs(ctx, tenant, uuid)
+	args := req.GetArguments()
+	tailLines, err := optInt(args, "tail_lines", 0, 0, math.MaxInt32)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	maxBytes, err := optInt(args, "max_bytes", defaultLogBytes, 1, maxLogBytes)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	buildLog, err := s.zuulClient.GetBuildLogs(ctx, tenant, uuid, maxBytes)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get build logs: %v", err)), nil
 	}
 
-	// Optionally truncate to last N lines
-	tailLines := int(req.GetFloat("tail_lines", 0))
+	content := buildLog.Content
+	truncated := buildLog.Truncated
 	if tailLines > 0 {
-		lines := strings.Split(logs, "\n")
-		if len(lines) > tailLines {
-			lines = lines[len(lines)-tailLines:]
-			logs = strings.Join(lines, "\n")
+		if tail, cut := lastLines(content, tailLines); cut {
+			content = tail
+			truncated = true
 		}
 	}
 
-	return mcp.NewToolResultText(logs), nil
+	if truncated {
+		content = fmt.Sprintf("[showing the end of the log only; full log: %s]\n%s", buildLog.URL, content)
+	}
+	return mcp.NewToolResultText(content), nil
 }
+
+// lastLines returns the last n lines of s (a trailing newline does not start
+// a new line) and whether anything was dropped. It scans backwards without
+// splitting, so it does not allocate per line.
+func lastLines(s string, n int64) (string, bool) {
+	end := len(s)
+	if strings.HasSuffix(s, "\n") {
+		end--
+	}
+	for i := end - 1; i >= 0; i-- {
+		if s[i] == '\n' {
+			n--
+			if n == 0 {
+				return s[i+1:], true
+			}
+		}
+	}
+	return s, false
+}
+
+const (
+	defaultLogBytes = 100_000
+	maxLogBytes     = 1_000_000
+)
 
 // handleEnqueue handles the enqueue tool.
 func (s *Server) handleEnqueue(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
