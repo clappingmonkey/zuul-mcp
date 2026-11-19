@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"strings"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/config"
 	"github.com/clappingmonkey/zuul-mcp/internal/server"
+	"github.com/clappingmonkey/zuul-mcp/internal/transport"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
@@ -21,7 +24,8 @@ var (
 func main() {
 	// Parse command line flags
 	envFile := flag.String("env-file", "", "Path to .env file for configuration")
-	transport := flag.String("transport", "", "Transport mode: stdio (default) or http/sse")
+	transportMode := flag.String("transport", "", "Transport mode: stdio (default), http, or sse")
+	host := flag.String("host", "", "HTTP/SSE bind address (default: 127.0.0.1)")
 	port := flag.String("port", "", "HTTP/SSE server port (default: 8080)")
 	showVersion := flag.Bool("version", false, "Show version information")
 	flag.Parse()
@@ -44,42 +48,44 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Override config with command line flags
-	if *transport != "" {
-		cfg.Transport = *transport
+	// Override config with command line flags, then validate the result.
+	if *transportMode != "" {
+		cfg.Transport = *transportMode
+	}
+	if *host != "" {
+		cfg.HTTPHost = *host
 	}
 	if *port != "" {
 		cfg.HTTPPort = *port
+	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
 	}
 
 	// Create the Zuul MCP server
 	s := server.New(cfg)
 
-	// Start the server based on transport mode
-	switch cfg.Transport {
-	case "stdio", "":
+	if cfg.Transport == "stdio" {
 		log.Println("Starting Zuul MCP server with stdio transport...")
 		if err := mcpserver.ServeStdio(s.MCPServer()); err != nil {
 			log.Fatalf("Server error: %v", err)
 		}
+		return
+	}
 
-	case "http":
-		addr := ":" + cfg.HTTPPort
-		log.Printf("Starting Zuul MCP server with HTTP transport on %s...\n", addr)
-		httpServer := mcpserver.NewStreamableHTTPServer(s.MCPServer())
-		if err := httpServer.Start(addr); err != nil {
-			log.Fatalf("Server error: %v", err)
-		}
+	handler, err := transport.NewHandler(s.MCPServer(), cfg)
+	if err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
 
-	case "sse":
-		addr := ":" + cfg.HTTPPort
-		log.Printf("Starting Zuul MCP server with SSE transport on %s...\n", addr)
-		sseServer := mcpserver.NewSSEServer(s.MCPServer())
-		if err := sseServer.Start(addr); err != nil {
-			log.Fatalf("Server error: %v", err)
-		}
-
-	default:
-		log.Fatalf("Unknown transport mode: %s (use 'stdio', 'http', or 'sse')", cfg.Transport)
+	bindHost := strings.TrimSuffix(strings.TrimPrefix(cfg.HTTPHost, "["), "]")
+	addr := net.JoinHostPort(bindHost, cfg.HTTPPort)
+	if !config.IsLoopback(cfg.HTTPHost) {
+		log.Printf("WARNING: listening on non-loopback address %s; clients must send the ZUUL_HTTP_AUTH_TOKEN bearer token. Put TLS in front of this server.", addr)
+	}
+	log.Printf("Starting Zuul MCP server with %s transport on %s...", cfg.Transport, addr)
+	srv := transport.NewServer(addr, handler)
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
 }
