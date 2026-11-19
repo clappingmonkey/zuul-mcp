@@ -2,13 +2,20 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"net"
+	"net/url"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/config"
 	"github.com/clappingmonkey/zuul-mcp/internal/server"
@@ -23,35 +30,45 @@ var (
 )
 
 func main() {
-	// Parse command line flags
+	// Logs go to stderr: on the stdio transport stdout carries the protocol.
+	slog.SetDefault(newLogger(slog.LevelInfo))
+	if err := run(); err != nil {
+		slog.Error("zuul-mcp failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func newLogger(level slog.Level) *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+}
+
+func run() error {
 	envFile := flag.String("env-file", "", "Path to .env file for configuration")
 	transportMode := flag.String("transport", "", "Transport mode: stdio (default), http, or sse")
 	host := flag.String("host", "", "HTTP/SSE bind address (default: 127.0.0.1)")
 	port := flag.String("port", "", "HTTP/SSE server port (default: 8080)")
 	readOnly := flag.Bool("read-only", false, "Hide tools that change Zuul state (also ZUUL_READ_ONLY=true)")
+	logLevel := flag.String("log-level", "", "Log level: debug, info (default), warn or error")
 	showVersion := flag.Bool("version", false, "Show version information")
 	flag.Parse()
 
 	resolveVersion()
 	if *showVersion {
 		fmt.Printf("zuul-mcp %s (%s) built on %s\n", version, commit, date)
-		os.Exit(0)
+		return nil
 	}
 
-	// Load environment variables from file if specified
 	if *envFile != "" {
 		if err := config.LoadEnvFile(*envFile); err != nil {
-			log.Fatalf("Failed to load env file: %v", err)
+			return fmt.Errorf("loading env file: %w", err)
 		}
 	}
-
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		return fmt.Errorf("loading configuration: %w", err)
 	}
 
-	// Override config with command line flags, then validate the result.
+	// Command line flags override the environment; validate the result.
 	if *transportMode != "" {
 		cfg.Transport = *transportMode
 	}
@@ -64,39 +81,98 @@ func main() {
 	if *readOnly {
 		cfg.ReadOnly = true
 	}
+	if *logLevel != "" {
+		cfg.LogLevel = *logLevel
+	}
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Create the Zuul MCP server
+	logger := newLogger(cfg.Level())
+	slog.SetDefault(logger)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		stop() // restore default handling: a second signal terminates at once
+	}()
+
 	s := server.New(cfg, version)
+	slog.Info("starting zuul-mcp", "version", version, "transport", cfg.Transport, "zuul_host", zuulHost(cfg.ZuulURL))
 	if reason := server.WriteToolsDisabledReason(cfg); reason != "" {
-		log.Printf("Tools that change Zuul state are disabled: %s", reason)
+		slog.Info("tools that change Zuul state are disabled", "reason", reason)
 	}
 
 	if cfg.Transport == "stdio" {
-		log.Println("Starting Zuul MCP server with stdio transport...")
-		if err := mcpserver.ServeStdio(s.MCPServer()); err != nil {
-			log.Fatalf("Server error: %v", err)
-		}
-		return
+		return serveStdio(ctx, s.MCPServer(), logger, os.Stdin, os.Stdout)
 	}
 
 	handler, err := transport.NewHandler(s.MCPServer(), cfg)
 	if err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
-
 	bindHost := strings.TrimSuffix(strings.TrimPrefix(cfg.HTTPHost, "["), "]")
 	addr := net.JoinHostPort(bindHost, cfg.HTTPPort)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listening on %s: %w", addr, err)
+	}
 	if !config.IsLoopback(cfg.HTTPHost) {
-		log.Printf("WARNING: listening on non-loopback address %s; clients must send the ZUUL_HTTP_AUTH_TOKEN bearer token. Put TLS in front of this server.", addr)
+		slog.Warn("listening on a non-loopback address; clients must send the ZUUL_HTTP_AUTH_TOKEN bearer token and TLS should terminate in front of this server", "addr", ln.Addr().String())
 	}
-	log.Printf("Starting Zuul MCP server with %s transport on %s...", cfg.Transport, addr)
+	slog.Info("listening", "addr", ln.Addr().String())
+
 	srv := transport.NewServer(addr, handler)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("Server error: %v", err)
+	srv.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelWarn)
+	if err := transport.Serve(ctx, srv, ln); err != nil {
+		return err
 	}
+	slog.Info("stopped")
+	return nil
+}
+
+// stdioShutdownTimeout bounds how long a signalled stdio server waits for
+// in-flight responses (e.g. writes blocked on a client that stopped reading).
+var stdioShutdownTimeout = 5 * time.Second
+
+// stdioAbandoned receives the result channel of a Listen call that
+// serveStdio stopped waiting for; tests use it to join that goroutine.
+var stdioAbandoned = func(<-chan error) {}
+
+func serveStdio(ctx context.Context, s *mcpserver.MCPServer, logger *slog.Logger, in io.Reader, out io.Writer) error {
+	stdio := mcpserver.NewStdioServer(s)
+	stdio.SetErrorLogger(slog.NewLogLogger(logger.Handler(), slog.LevelError))
+	done := make(chan error, 1)
+	go func() { done <- stdio.Listen(ctx, in, out) }()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-ctx.Done():
+		select {
+		case err = <-done:
+		case <-time.After(stdioShutdownTimeout):
+			slog.Warn("stopping without waiting for in-flight responses", "timeout", stdioShutdownTimeout)
+			stdioAbandoned(done)
+			return nil
+		}
+	}
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("stdio server: %w", err)
+	}
+	slog.Info("stopped")
+	return nil
+}
+
+// zuulHost returns only the host of the Zuul URL for logging: the path may
+// carry deployment details that do not belong in logs.
+func zuulHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }
 
 // resolveVersion fills in version information from the Go build info when

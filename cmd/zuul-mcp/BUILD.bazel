@@ -1,4 +1,4 @@
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "zuul-mcp_lib",
@@ -22,4 +22,14 @@ go_binary(
         "main.commit": "{STABLE_GIT_COMMIT}",
         "main.date": "{BUILD_DATE}",
     },
+)
+
+go_test(
+    name = "zuul-mcp_test",
+    srcs = ["main_test.go"],
+    embed = [":zuul-mcp_lib"],
+    deps = [
+        "//internal/config",
+        "//internal/server",
+    ],
 )

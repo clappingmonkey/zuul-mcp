@@ -482,3 +482,34 @@ func TestListHandlersRejectBadPaging(t *testing.T) {
 		t.Errorf("invalid paging must not reach Zuul, got %d requests", stub.hits)
 	}
 }
+
+func TestJSONResult(t *testing.T) {
+	type item struct {
+		Name string `json:"name"`
+	}
+	var nilItems []item
+	var nilRaw json.RawMessage
+	tests := []struct {
+		name string
+		in   any
+		want string
+	}{
+		{"compact", []item{{"a"}, {"b"}}, `[{"name":"a"},{"name":"b"}]`},
+		{"nil slice", nilItems, `[]`},
+		{"nil map", map[string]int(nil), `null`},
+		{"raw message compacted", json.RawMessage("{\n  \"a\": 1\n}"), `{"a":1}`},
+		{"nil raw message", nilRaw, `null`},
+		{"struct", item{"x"}, `{"name":"x"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := jsonResult(tt.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := resultText(t, res); got != tt.want {
+				t.Errorf("jsonResult() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}

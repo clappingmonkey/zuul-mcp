@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -20,9 +21,13 @@ var ErrNoTenant = errors.New("tenant is required: specify 'tenant' parameter or 
 // ErrNoAuth is returned when an authenticated operation is attempted without auth.
 var ErrNoAuth = errors.New("authentication required: set ZUUL_AUTH_TOKEN environment variable")
 
-// jsonResult converts a value to a JSON string for tool results.
+// jsonResult converts a value to compact JSON for tool results (indentation
+// only costs tokens). A nil list is rendered as [] rather than null.
 func jsonResult(v any) (*mcp.CallToolResult, error) {
-	data, err := json.MarshalIndent(v, "", "  ")
+	if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice && rv.IsNil() && rv.Type() != reflect.TypeFor[json.RawMessage]() {
+		v = []any{}
+	}
+	data, err := json.Marshal(v)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
 	}

@@ -97,6 +97,12 @@ Configuration can be done via environment variables or an env file:
 | `ZUUL_HTTP_AUTH_TOKEN` | No | Bearer token (min. 32 characters) clients must send to the HTTP/SSE transport. Required when `ZUUL_HTTP_HOST` is not a loopback address |
 | `ZUUL_HTTP_ALLOWED_ORIGINS` | No | Comma-separated browser origins (`scheme://host[:port]`) allowed to call the HTTP/SSE transport. Requests with any other `Origin` header are rejected |
 | `ZUUL_ALLOW_INSECURE_HTTP` | No | Set to `true` to allow sending `ZUUL_AUTH_TOKEN` to a non-loopback `http://` `ZUUL_URL` (not recommended) |
+| `ZUUL_LOG_LEVEL` | No | `debug`, `info` (default), `warn` or `error`. Logs always go to stderr |
+
+`ZUUL_AUTH_TOKEN` and `ZUUL_HTTP_AUTH_TOKEN` can instead be read from a file by
+setting `ZUUL_AUTH_TOKEN_FILE` / `ZUUL_HTTP_AUTH_TOKEN_FILE` to its path (for
+example a Docker or Kubernetes secret). Surrounding whitespace is trimmed; set
+either the variable or the `_FILE` variant, not both.
 
 ### Using an Env File
 
@@ -110,12 +116,16 @@ The env file format is simple key-value pairs:
 
 ```env
 # .env.zuul
-ZUUL_URL=https://zuul.example.com
-ZUUL_DEFAULT_TENANT=openstack
-ZUUL_AUTH_TOKEN=your-jwt-token
+ZUUL_URL=https://zuul.example.com  # comments may follow unquoted values
+export ZUUL_DEFAULT_TENANT=openstack
+ZUUL_AUTH_TOKEN='your-jwt-token'
 ```
 
-**Note**: Existing environment variables take precedence over values in the env file. This allows you to override specific settings without modifying the file.
+Lines may start with `export `. Single- or double-quoted values are taken
+literally (no escape sequences or variable expansion); an unquoted value ends
+at ` #`.
+
+**Note**: Variables already set in the environment, even to an empty value, take precedence over the env file. This allows you to override specific settings without modifying the file.
 
 ## Usage with Claude Desktop
 
@@ -215,7 +225,14 @@ zuul-mcp [options]
 | `-host` | HTTP/SSE bind address (default: `127.0.0.1`) |
 | `-port` | HTTP/SSE server port (default: `8080`) |
 | `-read-only` | Hide tools that change Zuul state |
+| `-log-level` | `debug`, `info` (default), `warn` or `error` |
 | `-version` | Show version information and exit |
+
+The server stops cleanly on `SIGINT`/`SIGTERM` (exit status 0). The HTTP/SSE
+transports stop accepting connections, give in-flight requests and event
+streams 2 seconds to finish, then cancel them; connections still open after
+10 seconds are closed. The stdio transport waits up to 5 seconds for pending
+responses. A second signal stops the server immediately.
 
 Example version output:
 

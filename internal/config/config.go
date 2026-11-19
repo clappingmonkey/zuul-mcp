@@ -5,6 +5,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/netip"
 	"net/url"
 	"os"
@@ -50,6 +52,87 @@ type Config struct {
 	// ReadOnly hides the tools that change Zuul state even when AuthToken
 	// is set.
 	ReadOnly bool
+
+	// LogLevel is the minimum level written to stderr (ZUUL_LOG_LEVEL):
+	// debug, info, warn or error. Empty means info. See Level.
+	LogLevel string
+}
+
+// Level returns the parsed LogLevel, or info if it is empty or invalid
+// (Validate reports invalid values).
+func (c *Config) Level() slog.Level {
+	if c.LogLevel == "" {
+		return slog.LevelInfo
+	}
+	level, err := ParseLogLevel(c.LogLevel)
+	if err != nil {
+		return slog.LevelInfo
+	}
+	return level
+}
+
+// maxSecretFileSize bounds the files read for *_FILE secrets.
+const maxSecretFileSize = 64 << 10
+
+// envSecret returns the value of key, or the trimmed contents of the file
+// named by key+"_FILE" (e.g. a Docker or Kubernetes secret). Setting both is
+// an error. Errors never include the secret.
+func envSecret(key string) (string, error) {
+	value, valueSet := os.LookupEnv(key)
+	path := os.Getenv(key + "_FILE")
+	if path == "" {
+		return value, nil
+	}
+	if valueSet {
+		return "", fmt.Errorf("set only one of %s and %s_FILE", key, key)
+	}
+	// Only regular files (symlinks to them are fine, as used by Kubernetes
+	// secret volumes): reading a FIFO or device could block or never end.
+	// The path is checked first, then opened without blocking where the OS
+	// supports it, and the opened file is checked again in case it changed.
+	notRegular := fmt.Errorf("%s_FILE must point to a regular file", key)
+	if info, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("reading %s_FILE: %w", key, err)
+	} else if !info.Mode().IsRegular() {
+		return "", notRegular
+	}
+	f, err := os.OpenFile(path, secretOpenFlags, 0)
+	if err != nil {
+		return "", fmt.Errorf("reading %s_FILE: %w", key, err)
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil {
+		return "", fmt.Errorf("reading %s_FILE: %w", key, err)
+	} else if !info.Mode().IsRegular() {
+		return "", notRegular
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxSecretFileSize+1))
+	if err != nil {
+		return "", fmt.Errorf("reading %s_FILE: %w", key, err)
+	}
+	if len(data) > maxSecretFileSize {
+		return "", fmt.Errorf("%s_FILE is larger than %d bytes", key, maxSecretFileSize)
+	}
+	secret := strings.TrimSpace(string(data))
+	if secret == "" {
+		return "", fmt.Errorf("%s_FILE is empty", key)
+	}
+	return secret, nil
+}
+
+// ParseLogLevel parses debug, info, warn or error (case-insensitive).
+func ParseLogLevel(s string) (slog.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	}
+	return 0, errors.New("log level must be one of debug, info, warn, error")
 }
 
 // envBool parses an optional boolean environment variable (unset or empty
@@ -72,11 +155,17 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		ZuulURL:       os.Getenv("ZUUL_URL"),
 		DefaultTenant: os.Getenv("ZUUL_DEFAULT_TENANT"),
-		AuthToken:     os.Getenv("ZUUL_AUTH_TOKEN"),
 		Transport:     os.Getenv("ZUUL_TRANSPORT"),
 		HTTPPort:      os.Getenv("ZUUL_HTTP_PORT"),
 		HTTPHost:      os.Getenv("ZUUL_HTTP_HOST"),
-		HTTPAuthToken: os.Getenv("ZUUL_HTTP_AUTH_TOKEN"),
+		LogLevel:      os.Getenv("ZUUL_LOG_LEVEL"),
+	}
+	var err error
+	if cfg.AuthToken, err = envSecret("ZUUL_AUTH_TOKEN"); err != nil {
+		return nil, err
+	}
+	if cfg.HTTPAuthToken, err = envSecret("ZUUL_HTTP_AUTH_TOKEN"); err != nil {
+		return nil, err
 	}
 	for i, origin := range strings.Split(os.Getenv("ZUUL_HTTP_ALLOWED_ORIGINS"), ",") {
 		if origin = strings.TrimSpace(origin); origin != "" {
@@ -87,7 +176,6 @@ func Load() (*Config, error) {
 			cfg.HTTPAllowedOrigins = append(cfg.HTTPAllowedOrigins, canonical)
 		}
 	}
-	var err error
 	if cfg.AllowInsecureHTTP, err = envBool("ZUUL_ALLOW_INSECURE_HTTP"); err != nil {
 		return nil, err
 	}
@@ -151,6 +239,11 @@ func (c *Config) Validate() error {
 		}
 	default:
 		return fmt.Errorf("unknown transport %q (use 'stdio', 'http', or 'sse')", c.Transport)
+	}
+	if c.LogLevel != "" {
+		if _, err := ParseLogLevel(c.LogLevel); err != nil {
+			return fmt.Errorf("ZUUL_LOG_LEVEL / -log-level: %w", err)
+		}
 	}
 	return nil
 }
@@ -260,8 +353,12 @@ func (c *Config) HasAuth() bool {
 }
 
 // LoadEnvFile loads environment variables from a .env file.
-// Format: KEY=value (one per line, # for comments, empty lines ignored).
-// Existing environment variables take precedence over values in the file.
+//
+// Each line is KEY=value, optionally prefixed with "export ". Blank lines and
+// lines starting with # are ignored. Values may be wrapped in single or double
+// quotes (taken literally, without escape sequences); an unquoted value ends
+// at a " #" comment. Variables already present in the environment, even if
+// empty, take precedence over the file.
 func LoadEnvFile(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -270,49 +367,87 @@ func LoadEnvFile(path string) error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	lineNum := 0
-
-	for scanner.Scan() {
-		lineNum++
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
+	// Room for a maxEnvLine-byte line plus its CRLF terminator.
+	scanner.Buffer(make([]byte, 0, 64<<10), maxEnvLine+2)
+	for lineNum := 1; scanner.Scan(); lineNum++ {
+		line := scanner.Text()
+		if len(line) > maxEnvLine {
+			return fmt.Errorf("invalid format at line %d: longer than %d bytes", lineNum, maxEnvLine)
+		}
+		if lineNum == 1 {
+			line = strings.TrimPrefix(line, "\ufeff")
+		}
+		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+		if rest, ok := strings.CutPrefix(line, "export"); ok && rest != "" && (rest[0] == ' ' || rest[0] == '\t') {
+			line = strings.TrimSpace(rest)
+		}
 
-		// Split on first '=' only (value may contain '=')
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
 			return fmt.Errorf("invalid format at line %d: missing '='", lineNum)
 		}
-
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		if key == "" {
-			return fmt.Errorf("invalid format at line %d: empty key", lineNum)
+		key = strings.TrimSpace(key)
+		if !validEnvKey(key) {
+			return fmt.Errorf("invalid format at line %d: variable names may only contain letters, digits and '_' and must not start with a digit", lineNum)
+		}
+		value, err := parseEnvValue(value)
+		if err != nil {
+			return fmt.Errorf("invalid format at line %d: %w", lineNum, err)
 		}
 
-		// Strip surrounding quotes if present (both single and double)
-		if len(value) >= 2 {
-			if (value[0] == '"' && value[len(value)-1] == '"') ||
-				(value[0] == '\'' && value[len(value)-1] == '\'') {
-				value = value[1 : len(value)-1]
-			}
+		if _, set := os.LookupEnv(key); set {
+			continue
 		}
-
-		// Only set if not already defined in environment (existing env vars take precedence)
-		if os.Getenv(key) == "" {
-			if err := os.Setenv(key, value); err != nil {
-				return fmt.Errorf("failed to set environment variable %s: %w", key, err)
-			}
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("failed to set environment variable %s: %w", key, err)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("error reading env file: %w", err)
 	}
-
 	return nil
+}
+
+func validEnvKey(key string) bool {
+	if key == "" || (key[0] >= '0' && key[0] <= '9') {
+		return false
+	}
+	for _, r := range key {
+		if r != '_' && (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// maxEnvLine is the longest line LoadEnvFile accepts.
+const maxEnvLine = 1 << 20
+
+// parseEnvValue unquotes the text after '=' or strips a trailing comment
+// (a '#' preceded by whitespace, so "KEY= # note" is empty but "KEY=#x" is
+// "#x"). Errors never include the value, which may be a secret.
+func parseEnvValue(raw string) (string, error) {
+	v := strings.TrimLeft(raw, " \t")
+	if v == "" || (v[0] == '#' && len(v) < len(raw)) {
+		return "", nil
+	}
+	if q := v[0]; q == '"' || q == '\'' {
+		end := strings.IndexByte(v[1:], q)
+		if end < 0 {
+			return "", errors.New("unterminated quoted value")
+		}
+		if rest := strings.TrimSpace(v[end+2:]); rest != "" && !strings.HasPrefix(rest, "#") {
+			return "", errors.New("unexpected text after quoted value")
+		}
+		return v[1 : end+1], nil
+	}
+	for i := 1; i < len(v); i++ {
+		if v[i] == '#' && (v[i-1] == ' ' || v[i-1] == '\t') {
+			return strings.TrimSpace(v[:i]), nil
+		}
+	}
+	return strings.TrimRight(v, " \t"), nil
 }

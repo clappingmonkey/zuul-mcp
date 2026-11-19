@@ -2,13 +2,20 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "config",
-    srcs = ["config.go"],
+    srcs = [
+        "config.go",
+        "secretfile_other.go",
+        "secretfile_unix.go",
+    ],
     importpath = "github.com/clappingmonkey/zuul-mcp/internal/config",
     visibility = ["//:__subpackages__"],
 )
 
 go_test(
     name = "config_test",
-    srcs = ["config_test.go"],
+    srcs = [
+        "config_test.go",
+        "config_unix_test.go",
+    ],
     embed = [":config"],
 )
