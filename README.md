@@ -7,7 +7,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
 
 ## Features
 
-- **29 MCP Tools** for comprehensive Zuul interaction:
+- **28 MCP Tools** for comprehensive Zuul interaction:
   - `list_tenants` - List all Zuul tenants
   - `list_builds` - Query builds with filters (project, pipeline, branch, result, etc.)
   - `get_build` - Get build details by UUID
@@ -15,8 +15,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `list_buildsets` - Query buildsets with filters
   - `get_buildset` - Get buildset details by UUID
   - `list_jobs` - List jobs in a tenant
-  - `get_job` - Get job details
-  - `get_job_variants` - Get variant configurations for a specific job
+  - `get_job` - Get job details (all variants of the job)
   - `list_pipelines` - List pipelines
   - `get_pipeline_status` - Get current pipeline status including queue
   - `list_projects` - List projects
@@ -30,11 +29,11 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `list_connections` - List all Zuul connections
   - `list_components` - List all Zuul components (schedulers, executors, mergers, etc.)
   - `list_semaphores` - List semaphores
-  - `list_autoholds` - List autohold requests (requires auth)
+  - `list_autoholds` - List autohold requests
   - `get_autohold` - Get details of a specific autohold request
   - `create_autohold` - Create autohold request (requires auth)
   - `delete_autohold` - Delete autohold request (requires auth)
-  - `enqueue` - Enqueue a change into a pipeline (requires auth)
+  - `enqueue` - Enqueue a change or ref into a pipeline (requires auth)
   - `dequeue` - Dequeue a change or ref from a pipeline (requires auth)
   - `promote` - Promote changes to the top of a pipeline queue (requires auth)
 
@@ -89,7 +88,7 @@ Configuration can be done via environment variables or an env file:
 |----------|----------|-------------|
 | `ZUUL_URL` | Yes | Base URL of your Zuul instance (e.g., `https://zuul.example.com`) |
 | `ZUUL_DEFAULT_TENANT` | No | Default tenant to use if not specified in tool calls |
-| `ZUUL_AUTH_TOKEN` | No | JWT Bearer token for authenticated endpoints (autoholds) |
+| `ZUUL_AUTH_TOKEN` | No | JWT Bearer token for write tools (create/delete autohold, enqueue, dequeue, promote) |
 | `ZUUL_TRANSPORT` | No | Transport mode: `stdio` (default), `http`, or `sse` |
 | `ZUUL_HTTP_PORT` | No | HTTP/SSE server port (default: `8080`) |
 
@@ -209,7 +208,7 @@ Once configured, you can ask Claude questions like:
 - "Create an autohold for job my-failing-job in project my-project"
 - "Show me details of autohold request 42"
 - "What node labels are available in this tenant?"
-- "Show me the variants for job build-container"
+- "Show me all variants of job build-container"
 - "List all connections configured in Zuul"
 - "What semaphores are defined in the tenant?"
 - "Enqueue change 12345,1 into the gate pipeline for project my-project"

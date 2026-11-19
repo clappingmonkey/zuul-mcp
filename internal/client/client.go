@@ -2,8 +2,10 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,8 +78,7 @@ func (c *Client) get(ctx context.Context, path string, result any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+		return statusError(resp)
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
@@ -85,6 +86,94 @@ func (c *Client) get(ctx context.Context, path string, result any) error {
 	}
 
 	return nil
+}
+
+// maxErrorBody bounds how much of an error response is read and echoed back.
+const maxErrorBody = 2048
+
+// readSnippet reads at most maxErrorBody bytes of the response body and marks
+// truncation.
+func readSnippet(resp *http.Response) string {
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody+1))
+	if len(data) > maxErrorBody {
+		return string(data[:maxErrorBody]) + "... (truncated)"
+	}
+	return string(data)
+}
+
+func statusError(resp *http.Response) error {
+	return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, readSnippet(resp))
+}
+
+// send performs a write request with an optional JSON body. zuul-web
+// acknowledges successful POSTs with 200 and a bare JSON `true`, and deletes
+// with 204 and no body.
+// Anything else (for example an HTML login page from an auth proxy) is
+// treated as a failure so a write is never reported as done when it was not.
+func (c *Client) send(ctx context.Context, method, path string, payload any) error {
+	var body io.Reader
+	if payload != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("marshaling request: %w", err)
+		}
+		body = bytes.NewReader(data)
+	}
+
+	resp, err := c.doRequest(ctx, method, path, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case method == http.MethodDelete && resp.StatusCode == http.StatusNoContent:
+		return nil
+	case method != http.MethodDelete && resp.StatusCode == http.StatusOK:
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody+1))
+		if err != nil {
+			return fmt.Errorf("reading response: %w", err)
+		}
+		if len(data) > maxErrorBody {
+			return fmt.Errorf("unexpected response from Zuul (expected `true`): %s... (truncated)", data[:maxErrorBody])
+		}
+		if strings.TrimSpace(string(data)) != "true" {
+			return fmt.Errorf("unexpected response from Zuul (expected `true`): %s", data)
+		}
+		return nil
+	case resp.StatusCode == http.StatusNotFound && method == http.MethodPost:
+		// zuul-web only registers its POST admin routes when authentication is
+		// configured, so a 404 can mean either a missing route or a missing
+		// tenant/project/pipeline.
+		return fmt.Errorf("not found (404): the tenant, project or pipeline does not exist, or zuul-web has no authentication configured so admin endpoints are disabled: %s", readSnippet(resp))
+	default:
+		return statusError(resp)
+	}
+}
+
+// projectPath escapes a project name for use in a URL path. zuul-web matches
+// project names with a greedy `{project_name:.*}` route and does not unquote
+// them, so slashes must stay literal while each segment is escaped.
+func projectPath(project string) string {
+	segments := strings.Split(project, "/")
+	for i, s := range segments {
+		segments[i] = url.PathEscape(s)
+	}
+	return strings.Join(segments, "/")
+}
+
+// jobPathReplacer double-encodes the characters that would otherwise be
+// altered by the second decoding stage (see jobPath).
+var jobPathReplacer = strings.NewReplacer("%25", "%2525", "+", "%252B")
+
+// jobPath escapes a job name for use in a URL path. Job names are decoded
+// twice: cheroot percent-decodes the path (except %2F), then zuul-web applies
+// unquote_plus. Slashes are therefore sent as %2F, while a literal '%' or '+'
+// must be double-encoded so the second stage does not turn them into an
+// escape sequence or a space. For example "a@b/c" becomes "a@b%2Fc" and
+// "my+job" becomes "my%252Bjob".
+func jobPath(job string) string {
+	return jobPathReplacer.Replace(url.PathEscape(job))
 }
 
 // ListTenants returns all tenants.
@@ -297,15 +386,17 @@ func (c *Client) ListJobs(ctx context.Context, tenant string) ([]models.Job, err
 	return jobs, nil
 }
 
-// GetJob returns details of a specific job.
-func (c *Client) GetJob(ctx context.Context, tenant, jobName string) (*models.Job, error) {
-	path := fmt.Sprintf("/api/tenant/%s/job/%s", url.PathEscape(tenant), url.PathEscape(jobName))
+// GetJob returns every variant of a job. zuul-web responds with a list of
+// full variant definitions whose schema is large and undocumented, so the
+// entries are passed through untyped.
+func (c *Client) GetJob(ctx context.Context, tenant, jobName string) ([]json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/job/%s", url.PathEscape(tenant), jobPath(jobName))
 
-	var job models.Job
-	if err := c.get(ctx, path, &job); err != nil {
+	var variants []json.RawMessage
+	if err := c.get(ctx, path, &variants); err != nil {
 		return nil, fmt.Errorf("getting job: %w", err)
 	}
-	return &job, nil
+	return variants, nil
 }
 
 // ListPipelines returns all pipelines for a tenant.
@@ -332,7 +423,7 @@ func (c *Client) ListProjects(ctx context.Context, tenant string) ([]models.Proj
 
 // GetProject returns details of a specific project.
 func (c *Client) GetProject(ctx context.Context, tenant, projectName string) (*models.Project, error) {
-	path := fmt.Sprintf("/api/tenant/%s/project/%s", url.PathEscape(tenant), url.PathEscape(projectName))
+	path := fmt.Sprintf("/api/tenant/%s/project/%s", url.PathEscape(tenant), projectPath(projectName))
 
 	var project models.Project
 	if err := c.get(ctx, path, &project); err != nil {
@@ -342,14 +433,47 @@ func (c *Client) GetProject(ctx context.Context, tenant, projectName string) (*m
 }
 
 // GetTenantStatus returns the status of a tenant including pipeline queues.
-func (c *Client) GetTenantStatus(ctx context.Context, tenant string) (*models.TenantStatus, error) {
+// zuul-web documents this payload as "subject to change without notice"
+// (e.g. queue items carry a `refs` list and millisecond integer timestamps),
+// so it is passed through untyped.
+func (c *Client) GetTenantStatus(ctx context.Context, tenant string) (json.RawMessage, error) {
 	path := fmt.Sprintf("/api/tenant/%s/status", url.PathEscape(tenant))
 
-	var status models.TenantStatus
+	var status json.RawMessage
 	if err := c.get(ctx, path, &status); err != nil {
 		return nil, fmt.Errorf("getting tenant status: %w", err)
 	}
-	return &status, nil
+	return status, nil
+}
+
+// ErrPipelineNotFound is returned by GetPipelineStatus when the tenant status
+// does not contain the requested pipeline.
+var ErrPipelineNotFound = errors.New("pipeline not found")
+
+// GetPipelineStatus returns the status entry of a single pipeline from the
+// tenant status, untyped for the same reason as GetTenantStatus.
+func (c *Client) GetPipelineStatus(ctx context.Context, tenant, pipeline string) (json.RawMessage, error) {
+	path := fmt.Sprintf("/api/tenant/%s/status", url.PathEscape(tenant))
+
+	var status struct {
+		Pipelines []json.RawMessage `json:"pipelines"`
+	}
+	if err := c.get(ctx, path, &status); err != nil {
+		return nil, fmt.Errorf("getting tenant status: %w", err)
+	}
+
+	for _, raw := range status.Pipelines {
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, fmt.Errorf("decoding pipeline status: %w", err)
+		}
+		if p.Name == pipeline {
+			return raw, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: %q", ErrPipelineNotFound, pipeline)
 }
 
 // GetChangeStatus returns the pipeline queue status for a specific change.
@@ -427,11 +551,9 @@ func (c *Client) ListAutoholds(ctx context.Context, tenant string) ([]models.Aut
 	return autoholds, nil
 }
 
-// GetAutohold returns a single autohold request by ID.
-// The response includes the Nodes field listing held node IDs, which is absent
-// in the list endpoint response.
-func (c *Client) GetAutohold(ctx context.Context, tenant string, requestID int) (*models.Autohold, error) {
-	path := fmt.Sprintf("/api/tenant/%s/autohold/%d", url.PathEscape(tenant), requestID)
+// GetAutohold returns a single autohold request by its string ID.
+func (c *Client) GetAutohold(ctx context.Context, tenant, requestID string) (*models.Autohold, error) {
+	path := fmt.Sprintf("/api/tenant/%s/autohold/%s", url.PathEscape(tenant), url.PathEscape(requestID))
 
 	var autohold models.Autohold
 	if err := c.get(ctx, path, &autohold); err != nil {
@@ -440,49 +562,25 @@ func (c *Client) GetAutohold(ctx context.Context, tenant string, requestID int) 
 	return &autohold, nil
 }
 
-// CreateAutohold creates a new autohold request.
-func (c *Client) CreateAutohold(ctx context.Context, tenant, project, job string, req *models.AutoholdRequest) (*models.Autohold, error) {
-	path := fmt.Sprintf("/api/tenant/%s/project/%s/autohold/%s",
-		url.PathEscape(tenant), url.PathEscape(project), url.PathEscape(job))
+// CreateAutohold creates a new autohold request (requires auth). zuul-web
+// does not return the created request; use ListAutoholds to find its ID.
+func (c *Client) CreateAutohold(ctx context.Context, tenant, project string, req *models.AutoholdRequest) error {
+	path := fmt.Sprintf("/api/tenant/%s/project/%s/autohold",
+		url.PathEscape(tenant), projectPath(project))
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling request: %w", err)
+	if err := c.send(ctx, http.MethodPost, path, req); err != nil {
+		return fmt.Errorf("creating autohold: %w", err)
 	}
-
-	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
-	if err != nil {
-		return nil, fmt.Errorf("creating autohold: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var autohold models.Autohold
-	if err := json.NewDecoder(resp.Body).Decode(&autohold); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
-	}
-	return &autohold, nil
+	return nil
 }
 
-// DeleteAutohold deletes an autohold request.
-func (c *Client) DeleteAutohold(ctx context.Context, tenant string, requestID int) error {
-	path := fmt.Sprintf("/api/tenant/%s/autohold/%d", url.PathEscape(tenant), requestID)
+// DeleteAutohold deletes an autohold request by its string ID (requires auth).
+func (c *Client) DeleteAutohold(ctx context.Context, tenant, requestID string) error {
+	path := fmt.Sprintf("/api/tenant/%s/autohold/%s", url.PathEscape(tenant), url.PathEscape(requestID))
 
-	resp, err := c.doRequest(ctx, http.MethodDelete, path, nil)
-	if err != nil {
+	if err := c.send(ctx, http.MethodDelete, path, nil); err != nil {
 		return fmt.Errorf("deleting autohold: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
-	}
-
 	return nil
 }
 
@@ -536,61 +634,38 @@ func (c *Client) ListSemaphores(ctx context.Context, tenant string) ([]json.RawM
 	return semaphores, nil
 }
 
-// ListComponents returns all Zuul components (schedulers, executors, mergers, etc.).
-// TODO: Replace with verified schema once the Zuul API response for /api/components
-// is formally documented (currently not in the OpenAPI spec).
-func (c *Client) ListComponents(ctx context.Context) (*models.Components, error) {
+// ListComponents returns all registered Zuul components grouped by kind.
+func (c *Client) ListComponents(ctx context.Context) (models.Components, error) {
 	var components models.Components
 	if err := c.get(ctx, "/api/components", &components); err != nil {
 		return nil, fmt.Errorf("listing components: %w", err)
 	}
-	return &components, nil
+	return components, nil
 }
 
-// GetJobVariants returns the list of variants for a specific job.
-// TODO: Replace json.RawMessage with a typed JobVariant model once the Zuul API
-// response schema for /job/{name}/variants is documented and verified against a live instance.
-func (c *Client) GetJobVariants(ctx context.Context, tenant, jobName string) ([]json.RawMessage, error) {
-	path := fmt.Sprintf("/api/tenant/%s/job/%s/variants", url.PathEscape(tenant), url.PathEscape(jobName))
-
-	var variants []json.RawMessage
-	if err := c.get(ctx, path, &variants); err != nil {
-		return nil, fmt.Errorf("getting job variants: %w", err)
-	}
-	return variants, nil
-}
-
-// EnqueueRequest represents a request to enqueue a change.
+// EnqueueRequest is the body of POST /project/{project}/enqueue. Set either
+// Change, or Ref with optional OldRev/NewRev.
 type EnqueueRequest struct {
 	Pipeline string `json:"pipeline"`
-	Change   string `json:"change"`
-	Trigger  string `json:"trigger,omitempty"`
+	Change   string `json:"change,omitempty"`
+	Ref      string `json:"ref,omitempty"`
+	OldRev   string `json:"oldrev,omitempty"`
+	NewRev   string `json:"newrev,omitempty"`
 }
 
-// Enqueue enqueues a change into a pipeline (requires auth).
+// Enqueue enqueues a change or ref into a pipeline (requires auth).
 func (c *Client) Enqueue(ctx context.Context, tenant, project string, req *EnqueueRequest) error {
 	path := fmt.Sprintf("/api/tenant/%s/project/%s/enqueue",
-		url.PathEscape(tenant), url.PathEscape(project))
+		url.PathEscape(tenant), projectPath(project))
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshaling request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
-	if err != nil {
-		return fmt.Errorf("enqueueing change: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	if err := c.send(ctx, http.MethodPost, path, req); err != nil {
+		return fmt.Errorf("enqueueing: %w", err)
 	}
 	return nil
 }
 
-// DequeueRequest represents a request to dequeue a change.
+// DequeueRequest is the body of POST /project/{project}/dequeue. Exactly one
+// of Change or Ref must be set.
 type DequeueRequest struct {
 	Pipeline string `json:"pipeline"`
 	Change   string `json:"change,omitempty"`
@@ -600,22 +675,10 @@ type DequeueRequest struct {
 // Dequeue dequeues a change or ref from a pipeline (requires auth).
 func (c *Client) Dequeue(ctx context.Context, tenant, project string, req *DequeueRequest) error {
 	path := fmt.Sprintf("/api/tenant/%s/project/%s/dequeue",
-		url.PathEscape(tenant), url.PathEscape(project))
+		url.PathEscape(tenant), projectPath(project))
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshaling request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
-	if err != nil {
-		return fmt.Errorf("dequeueing change: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+	if err := c.send(ctx, http.MethodPost, path, req); err != nil {
+		return fmt.Errorf("dequeueing: %w", err)
 	}
 	return nil
 }
@@ -626,24 +689,12 @@ type PromoteRequest struct {
 	Changes  []string `json:"changes"`
 }
 
-// Promote reorders changes in a pipeline by moving them to the top of the queue (requires auth).
+// Promote moves changes to the top of their pipeline queue (requires auth).
 func (c *Client) Promote(ctx context.Context, tenant string, req *PromoteRequest) error {
 	path := fmt.Sprintf("/api/tenant/%s/promote", url.PathEscape(tenant))
 
-	body, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshaling request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(body)))
-	if err != nil {
+	if err := c.send(ctx, http.MethodPost, path, req); err != nil {
 		return fmt.Errorf("promoting changes: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 	return nil
 }

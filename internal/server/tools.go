@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/client"
@@ -68,7 +70,7 @@ func (s *Server) handleGetBuild(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	uuid, err := req.RequireString("uuid")
+	uuid, err := requireString(req, "uuid")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -87,7 +89,7 @@ func (s *Server) handleGetBuildset(ctx context.Context, req mcp.CallToolRequest)
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	uuid, err := req.RequireString("uuid")
+	uuid, err := requireString(req, "uuid")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -144,7 +146,7 @@ func (s *Server) handleGetJob(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	jobName, err := req.RequireString("job_name")
+	jobName, err := requireString(req, "job_name")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -177,25 +179,16 @@ func (s *Server) handleGetPipelineStatus(ctx context.Context, req mcp.CallToolRe
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	pipelineName, err := req.RequireString("pipeline")
+	pipelineName, err := requireString(req, "pipeline")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	// Get tenant status which contains all pipeline statuses
-	status, err := s.zuulClient.GetTenantStatus(ctx, tenant)
+	status, err := s.zuulClient.GetPipelineStatus(ctx, tenant, pipelineName)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get tenant status: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get pipeline status: %v", err)), nil
 	}
-
-	// Find the specific pipeline
-	for _, p := range status.Pipelines {
-		if p.Name == pipelineName {
-			return jsonResult(p)
-		}
-	}
-
-	return mcp.NewToolResultError(fmt.Sprintf("pipeline '%s' not found", pipelineName)), nil
+	return jsonResult(status)
 }
 
 // handleListProjects handles the list_projects tool.
@@ -219,7 +212,7 @@ func (s *Server) handleGetProject(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	projectName, err := req.RequireString("project")
+	projectName, err := requireString(req, "project")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -254,7 +247,7 @@ func (s *Server) handleGetChangeStatus(ctx context.Context, req mcp.CallToolRequ
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	change, err := req.RequireString("change")
+	change, err := requireString(req, "change")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -341,8 +334,6 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 }
 
 // handleListComponents handles the list_components tool.
-// TODO: Replace with typed result once the Zuul API response for /api/components
-// is formally documented (currently not in the OpenAPI spec).
 func (s *Server) handleListComponents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	components, err := s.zuulClient.ListComponents(ctx)
 	if err != nil {
@@ -366,26 +357,6 @@ func (s *Server) handleListSemaphores(ctx context.Context, req mcp.CallToolReque
 	return jsonResult(semaphores)
 }
 
-// handleGetJobVariants handles the get_job_variants tool.
-// TODO: Return typed JobVariant objects once the Zuul API response schema is verified.
-func (s *Server) handleGetJobVariants(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	tenant, err := s.getTenant(req)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	jobName, err := req.RequireString("job_name")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	variants, err := s.zuulClient.GetJobVariants(ctx, tenant, jobName)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get job variants: %v", err)), nil
-	}
-	return jsonResult(variants)
-}
-
 // handleListAutoholds handles the list_autoholds tool.
 func (s *Server) handleListAutoholds(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenant, err := s.getTenant(req)
@@ -407,12 +378,12 @@ func (s *Server) handleGetAutohold(ctx context.Context, req mcp.CallToolRequest)
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	requestID, err := req.RequireFloat("request_id")
+	requestID, err := autoholdID(req)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	autohold, err := s.zuulClient.GetAutohold(ctx, tenant, int(requestID))
+	autohold, err := s.zuulClient.GetAutohold(ctx, tenant, requestID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get autohold: %v", err)), nil
 	}
@@ -430,35 +401,75 @@ func (s *Server) handleCreateAutohold(ctx context.Context, req mcp.CallToolReque
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	project, err := req.RequireString("project")
+	project, err := requireString(req, "project")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	job, err := req.RequireString("job")
+	job, err := requireString(req, "job")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	reason, err := req.RequireString("reason")
+	reason, err := requireString(req, "reason")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	// Build the autohold request
+	args := req.GetArguments()
+
+	// These parameters were advertised by earlier releases. Silently ignoring
+	// them would widen the hold to every ref or drop the expiration, so fail.
+	if _, ok := args["ref_filter"]; ok {
+		return mcp.NewToolResultError("'ref_filter' is no longer supported: use 'ref' (a regular expression) or 'change'"), nil
+	}
+	if _, ok := args["node_expiration"]; ok {
+		return mcp.NewToolResultError("'node_expiration' is no longer supported: use 'node_hold_expiration'"), nil
+	}
+
+	change, err := optString(args, "change")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	ref, err := optString(args, "ref")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if change != "" && ref != "" {
+		return mcp.NewToolResultError("'change' and 'ref' are mutually exclusive"), nil
+	}
+
+	count, err := optInt(args, "count", 1, 1, math.MaxInt32)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	ahReq := &models.AutoholdRequest{
-		Reason:         reason,
-		RefFilter:      req.GetString("ref_filter", ""),
-		ChangeFilter:   req.GetString("change", ""),
-		Count:          int(req.GetFloat("count", 1)),
-		NodeExpiration: int(req.GetFloat("node_expiration", 0)),
+		Job:    job,
+		Reason: reason,
+		Count:  int(count),
+	}
+	if change != "" {
+		ahReq.Change = &change
+	}
+	if ref != "" {
+		ahReq.Ref = &ref
+	}
+	if v, ok := args["node_hold_expiration"]; ok && v != nil {
+		exp, err := optInt(args, "node_hold_expiration", 0, 0, math.MaxInt32)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		e := int(exp)
+		ahReq.NodeHoldExpiration = &e
 	}
 
-	autohold, err := s.zuulClient.CreateAutohold(ctx, tenant, project, job, ahReq)
-	if err != nil {
+	if err := s.zuulClient.CreateAutohold(ctx, tenant, project, ahReq); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to create autohold: %v", err)), nil
 	}
-	return jsonResult(autohold)
+	return mcp.NewToolResultText(fmt.Sprintf(
+		"Created autohold request for job %s in project %s (count %d). Use list_autoholds to see its ID.",
+		job, project, ahReq.Count)), nil
 }
 
 // handleDeleteAutohold handles the delete_autohold tool.
@@ -472,17 +483,111 @@ func (s *Server) handleDeleteAutohold(ctx context.Context, req mcp.CallToolReque
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	requestID, err := req.RequireFloat("request_id")
+	requestID, err := autoholdID(req)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	err = s.zuulClient.DeleteAutohold(ctx, tenant, int(requestID))
+	err = s.zuulClient.DeleteAutohold(ctx, tenant, requestID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to delete autohold: %v", err)), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted autohold request %d", int(requestID))), nil
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted autohold request %s", requestID)), nil
+}
+
+// maxAutoholdID is the largest ZooKeeper sequence number (10 digits).
+const maxAutoholdID = 9_999_999_999
+
+// autoholdID reads the request_id argument. Zuul autohold IDs are 10-digit
+// zero-padded ZooKeeper sequence numbers such as "0000000001"; shorter digit
+// strings and bare numbers are padded to that form for convenience.
+func autoholdID(req mcp.CallToolRequest) (string, error) {
+	invalid := errors.New("'request_id' is required and must be an autohold ID such as \"0000000001\"")
+	var n int64
+	switch v := req.GetArguments()["request_id"].(type) {
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" || len(s) > 10 || strings.Trim(s, "0123456789") != "" {
+			return "", invalid
+		}
+		parsed, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return "", invalid
+		}
+		n = parsed
+	case float64:
+		if math.IsNaN(v) || v < 0 || v > maxAutoholdID || v != math.Trunc(v) {
+			return "", invalid
+		}
+		n = int64(v)
+	default:
+		return "", invalid
+	}
+	return fmt.Sprintf("%010d", n), nil
+}
+
+// requireString reads a required string argument and rejects blank values,
+// which mcp-go does not catch on its own.
+func requireString(req mcp.CallToolRequest, key string) (string, error) {
+	s, err := req.RequireString(key)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(s) == "" {
+		return "", fmt.Errorf("'%s' must not be blank", key)
+	}
+	return s, nil
+}
+
+// optString reads an optional string argument. Absent or null yields "". The
+// value is returned verbatim (it may be a regex), and a supplied but blank
+// value is an error: silently treating it as absent would widen filters such
+// as an autohold's change/ref to "match everything".
+func optString(args map[string]any, key string) (string, error) {
+	v, ok := args[key]
+	if !ok || v == nil {
+		return "", nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("'%s' must be a string", key)
+	}
+	if strings.TrimSpace(s) == "" {
+		return "", fmt.Errorf("'%s' must not be blank; omit it instead", key)
+	}
+	return s, nil
+}
+
+// optInt reads an optional integer argument within [lo, hi]. Absent or null
+// yields def. JSON numbers must be finite whole numbers; decimal strings are
+// also accepted because some clients send numbers as strings.
+func optInt(args map[string]any, key string, def, lo, hi int64) (int64, error) {
+	v, ok := args[key]
+	if !ok || v == nil {
+		return def, nil
+	}
+	rangeErr := fmt.Errorf("'%s' must be an integer between %d and %d", key, lo, hi)
+	var n int64
+	switch t := v.(type) {
+	case float64:
+		if math.IsNaN(t) || t < float64(lo) || t > float64(hi) || t != math.Trunc(t) {
+			return 0, rangeErr
+		}
+		n = int64(t)
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(t), 10, 64)
+		if err != nil {
+			return 0, rangeErr
+		}
+		n = parsed
+	default:
+		return 0, rangeErr
+	}
+	if n < lo || n > hi {
+		return 0, rangeErr
+	}
+	return n, nil
 }
 
 // handleGetBuildLogs handles the get_build_logs tool.
@@ -492,7 +597,7 @@ func (s *Server) handleGetBuildLogs(ctx context.Context, req mcp.CallToolRequest
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	uuid, err := req.RequireString("uuid")
+	uuid, err := requireString(req, "uuid")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -526,33 +631,57 @@ func (s *Server) handleEnqueue(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	project, err := req.RequireString("project")
+	project, err := requireString(req, "project")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	pipeline, err := req.RequireString("pipeline")
+	pipeline, err := requireString(req, "pipeline")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	change, err := req.RequireString("change")
+	enqReq := &client.EnqueueRequest{Pipeline: pipeline}
+	args := req.GetArguments()
+	for key, dst := range map[string]*string{
+		"change": &enqReq.Change,
+		"ref":    &enqReq.Ref,
+		"oldrev": &enqReq.OldRev,
+		"newrev": &enqReq.NewRev,
+	} {
+		if *dst, err = optString(args, key); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+
+	target, err := exactlyOne(enqReq.Change, enqReq.Ref)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-
-	enqReq := &client.EnqueueRequest{
-		Pipeline: pipeline,
-		Change:   change,
-		Trigger:  req.GetString("trigger", ""),
+	if enqReq.Change != "" && (enqReq.OldRev != "" || enqReq.NewRev != "") {
+		return mcp.NewToolResultError("'oldrev' and 'newrev' can only be used with 'ref'"), nil
 	}
 
 	err = s.zuulClient.Enqueue(ctx, tenant, project, enqReq)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to enqueue change: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Sprintf("failed to enqueue: %v", err)), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Successfully enqueued change %s into pipeline %s for project %s", change, pipeline, project)), nil
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully enqueued %s into pipeline %s for project %s", target, pipeline, project)), nil
+}
+
+// exactlyOne checks that exactly one of change or ref is set and returns it.
+func exactlyOne(change, ref string) (string, error) {
+	switch {
+	case change != "" && ref != "":
+		return "", errors.New("provide either 'change' or 'ref', not both")
+	case change != "":
+		return change, nil
+	case ref != "":
+		return ref, nil
+	default:
+		return "", errors.New("either 'change' or 'ref' must be provided")
+	}
 }
 
 // handleDequeue handles the dequeue tool.
@@ -566,21 +695,28 @@ func (s *Server) handleDequeue(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	project, err := req.RequireString("project")
+	project, err := requireString(req, "project")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	pipeline, err := req.RequireString("pipeline")
+	pipeline, err := requireString(req, "pipeline")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	change := req.GetString("change", "")
-	ref := req.GetString("ref", "")
+	change, err := optString(req.GetArguments(), "change")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	ref, err := optString(req.GetArguments(), "ref")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
-	if change == "" && ref == "" {
-		return mcp.NewToolResultError("either 'change' or 'ref' must be provided"), nil
+	target, err := exactlyOne(change, ref)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	deqReq := &client.DequeueRequest{
@@ -594,10 +730,6 @@ func (s *Server) handleDequeue(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(fmt.Sprintf("failed to dequeue: %v", err)), nil
 	}
 
-	target := change
-	if target == "" {
-		target = ref
-	}
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully dequeued %s from pipeline %s for project %s", target, pipeline, project)), nil
 }
 
@@ -612,20 +744,14 @@ func (s *Server) handlePromote(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	pipeline, err := req.RequireString("pipeline")
+	pipeline, err := requireString(req, "pipeline")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	changesStr, err := req.RequireString("changes")
+	changes, err := changeList(req.GetArguments()["changes"])
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	// Split space-separated change IDs (e.g., "12345,1 13336,3")
-	changes := strings.Fields(changesStr)
-	if len(changes) == 0 {
-		return mcp.NewToolResultError("at least one change ID must be provided"), nil
 	}
 
 	promReq := &client.PromoteRequest{
@@ -639,4 +765,30 @@ func (s *Server) handlePromote(ctx context.Context, req mcp.CallToolRequest) (*m
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully promoted %d change(s) in pipeline %s", len(changes), pipeline)), nil
+}
+
+// changeList normalizes the promote "changes" argument. Change IDs contain
+// commas ("12345,1"), so they cannot be comma-separated. An array is
+// preferred, and a whitespace-separated string is also accepted.
+func changeList(v any) ([]string, error) {
+	var changes []string
+	switch t := v.(type) {
+	case []any:
+		for _, item := range t {
+			s, ok := item.(string)
+			if !ok {
+				return nil, errors.New("'changes' must be an array of change ID strings")
+			}
+			if s = strings.TrimSpace(s); s == "" {
+				return nil, errors.New("'changes' must not contain blank entries")
+			}
+			changes = append(changes, s)
+		}
+	case string:
+		changes = strings.Fields(t)
+	}
+	if len(changes) == 0 {
+		return nil, errors.New("'changes' must contain at least one change ID (e.g. [\"12345,1\", \"13336,3\"])")
+	}
+	return changes, nil
 }

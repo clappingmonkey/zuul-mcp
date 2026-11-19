@@ -47,6 +47,59 @@ func TestZuulTimeUnmarshal_ZuulFormat(t *testing.T) {
 	}
 }
 
+func TestZuulTimeUnmarshal_FractionalNoZone(t *testing.T) {
+	input := `"2026-03-06T07:24:19.123456"`
+	var zt ZuulTime
+	if err := json.Unmarshal([]byte(input), &zt); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := time.Date(2026, 3, 6, 7, 24, 19, 123456000, time.UTC)
+	if !zt.Time.Equal(expected) {
+		t.Errorf("expected %v, got %v", expected, zt.Time)
+	}
+}
+
+func TestAutoholdUnmarshal(t *testing.T) {
+	input := `{
+		"id": "0000000007",
+		"tenant": "t",
+		"project": "org/repo",
+		"job": "j",
+		"ref_filter": ".*",
+		"max_count": 1,
+		"current_count": 0,
+		"reason": "debug",
+		"node_expiration": 86400,
+		"expired": null,
+		"nodes": [{"build": "abc", "nodes": ["n1"]}]
+	}`
+	var a Autohold
+	if err := json.Unmarshal([]byte(input), &a); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.ID != "0000000007" {
+		t.Errorf("expected zero-padded string id, got %q", a.ID)
+	}
+	if a.NodeExpiration != 86400 {
+		t.Errorf("expected node_expiration 86400, got %d", a.NodeExpiration)
+	}
+	if len(a.Nodes) == 0 {
+		t.Errorf("expected nodes to be preserved")
+	}
+}
+
+func TestJobListEntryUnmarshal(t *testing.T) {
+	input := `[{"name": "tox", "description": "Run tox", "tags": null,
+		"variants": [{"parent": "base", "branches": ["main"]}]}]`
+	var jobs []Job
+	if err := json.Unmarshal([]byte(input), &jobs); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(jobs) != 1 || len(jobs[0].Variants) != 1 || jobs[0].Variants[0].Parent != "base" {
+		t.Errorf("unexpected jobs: %+v", jobs)
+	}
+}
+
 func TestZuulTimeUnmarshal_Null(t *testing.T) {
 	input := `null`
 	var zt ZuulTime
