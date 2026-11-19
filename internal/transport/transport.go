@@ -4,9 +4,12 @@
 package transport
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
+	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -109,6 +112,50 @@ func NewServer(addr string, handler http.Handler) *http.Server {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    64 << 10,
 	}
+}
+
+// Shutdown timing: requests get drainTimeout to finish on their own, then
+// their contexts are cancelled (ending long-lived event streams); the server
+// gives up after shutdownTimeout and closes remaining connections.
+var (
+	drainTimeout    = 2 * time.Second
+	shutdownTimeout = 10 * time.Second
+)
+
+// Serve runs srv on ln until ctx is cancelled, then shuts it down gracefully,
+// force-closing connections still open after shutdownTimeout. It returns nil
+// once a requested shutdown completes and an error only if serving fails.
+func Serve(ctx context.Context, srv *http.Server, ln net.Listener) error {
+	reqCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
+	srv.BaseContext = func(net.Listener) context.Context { return reqCtx }
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve(ln) }()
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	shutdownErr := make(chan error, 1)
+	go func() { shutdownErr <- srv.Shutdown(shutdownCtx) }()
+
+	var err error
+	select {
+	case err = <-shutdownErr:
+	case <-time.After(drainTimeout):
+		cancelRequests()
+		err = <-shutdownErr
+	}
+	if err != nil {
+		// Requested shutdown is not a failure: force-close what is left.
+		slog.Warn("closing connections that did not finish in time", "timeout", shutdownTimeout, "error", err)
+		_ = srv.Close()
+	}
+	return nil
 }
 
 func isPreflight(r *http.Request) bool {

@@ -1,5 +1,5 @@
 # Binaries
-zuul-mcp
+/zuul-mcp
 *.exe
 dist/
 

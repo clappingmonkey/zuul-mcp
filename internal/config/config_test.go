@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,14 +19,19 @@ var configEnvVars = []string{
 	"ZUUL_HTTP_ALLOWED_ORIGINS",
 	"ZUUL_ALLOW_INSECURE_HTTP",
 	"ZUUL_READ_ONLY",
+	"ZUUL_LOG_LEVEL",
+	"ZUUL_AUTH_TOKEN_FILE",
+	"ZUUL_HTTP_AUTH_TOKEN_FILE",
+	"ENV_FILE_TEST_VAR",
 }
 
-// isolateEnv blanks every variable the config reads; t.Setenv restores the
+// isolateEnv unsets every variable the config reads; t.Setenv restores the
 // originals when the test ends.
 func isolateEnv(t *testing.T, vars map[string]string) {
 	t.Helper()
 	for _, k := range configEnvVars {
 		t.Setenv(k, "")
+		os.Unsetenv(k)
 	}
 	for k, v := range vars {
 		t.Setenv(k, v)
@@ -459,7 +465,138 @@ ZUUL_AUTH_TOKEN=file-token`,
 			name:        "empty key",
 			content:     `=value`,
 			wantErr:     true,
-			errContains: "empty key",
+			errContains: "variable names",
+		},
+		{
+			name:        "invalid key",
+			content:     `ZUUL URL=https://zuul.example.com`,
+			wantErr:     true,
+			errContains: "line 1",
+		},
+		{
+			name:        "key starting with a digit",
+			content:     "# c\n1ZUUL=x",
+			wantErr:     true,
+			errContains: "line 2",
+		},
+		{
+			name:      "set but empty env var takes precedence",
+			content:   `ZUUL_AUTH_TOKEN=file-token`,
+			presetEnv: map[string]string{"ZUUL_AUTH_TOKEN": ""},
+			check: func() bool {
+				v, ok := os.LookupEnv("ZUUL_AUTH_TOKEN")
+				return ok && v == ""
+			},
+		},
+		{
+			name:    "export prefix and BOM",
+			content: "\ufeffexport ZUUL_URL=https://zuul.example.com\nexport\tZUUL_DEFAULT_TENANT=t",
+			check: func() bool {
+				return os.Getenv("ZUUL_URL") == "https://zuul.example.com" && os.Getenv("ZUUL_DEFAULT_TENANT") == "t"
+			},
+		},
+		{
+			name:    "variable named export",
+			content: `exportX=1`,
+			check: func() bool {
+				return os.Getenv("exportX") == "1"
+			},
+		},
+		{
+			name: "inline comments",
+			content: `ZUUL_URL=https://zuul.example.com # production
+ZUUL_AUTH_TOKEN=abc#def
+ZUUL_DEFAULT_TENANT="my tenant" # quoted
+ZUUL_HTTP_HOST='a # b'`,
+			check: func() bool {
+				return os.Getenv("ZUUL_URL") == "https://zuul.example.com" &&
+					os.Getenv("ZUUL_AUTH_TOKEN") == "abc#def" &&
+					os.Getenv("ZUUL_DEFAULT_TENANT") == "my tenant" &&
+					os.Getenv("ZUUL_HTTP_HOST") == "a # b"
+			},
+		},
+		{
+			name:    "trailing whitespace after unquoted values is dropped",
+			content: "ZUUL_HTTP_PORT=8080 \t\nZUUL_AUTH_TOKEN=abc  \r\nZUUL_DEFAULT_TENANT=' keep '  ",
+			check: func() bool {
+				return os.Getenv("ZUUL_HTTP_PORT") == "8080" &&
+					os.Getenv("ZUUL_AUTH_TOKEN") == "abc" &&
+					os.Getenv("ZUUL_DEFAULT_TENANT") == " keep "
+			},
+		},
+		{
+			name:    "comment-only values are empty, a leading hash is literal",
+			content: "ZUUL_LOG_LEVEL= # default\nZUUL_DEFAULT_TENANT=\t#x\nZUUL_AUTH_TOKEN=#literal",
+			check: func() bool {
+				level, levelSet := os.LookupEnv("ZUUL_LOG_LEVEL")
+				tenant, tenantSet := os.LookupEnv("ZUUL_DEFAULT_TENANT")
+				return levelSet && level == "" && tenantSet && tenant == "" &&
+					os.Getenv("ZUUL_AUTH_TOKEN") == "#literal"
+			},
+		},
+		{
+			name:    "BOM before an indented comment",
+			content: "\ufeff  # comment\nZUUL_URL=https://zuul.example.com",
+			check: func() bool {
+				return os.Getenv("ZUUL_URL") == "https://zuul.example.com"
+			},
+		},
+		{
+			name:    "CRLF line endings",
+			content: "ZUUL_URL=https://zuul.example.com\r\nZUUL_DEFAULT_TENANT='t'\r\n",
+			check: func() bool {
+				return os.Getenv("ZUUL_URL") == "https://zuul.example.com" && os.Getenv("ZUUL_DEFAULT_TENANT") == "t"
+			},
+		},
+		{
+			name:    "line of exactly the maximum length",
+			content: "ENV_FILE_TEST_VAR=" + strings.Repeat("x", maxEnvLine-len("ENV_FILE_TEST_VAR=")) + "\r\n",
+			check: func() bool {
+				return len(os.Getenv("ENV_FILE_TEST_VAR")) == maxEnvLine-len("ENV_FILE_TEST_VAR=")
+			},
+		},
+		{
+			name:    "line one byte over the maximum (LF)",
+			content: "ENV_FILE_TEST_VAR=" + strings.Repeat("x", maxEnvLine+1-len("ENV_FILE_TEST_VAR=")) + "\n",
+			wantErr: true,
+		},
+		{
+			name:    "line one byte over the maximum (CRLF)",
+			content: "ENV_FILE_TEST_VAR=" + strings.Repeat("x", maxEnvLine+1-len("ENV_FILE_TEST_VAR=")) + "\r\n",
+			wantErr: true,
+		},
+		{
+			name:        "line one byte over the maximum (EOF)",
+			content:     "ENV_FILE_TEST_VAR=" + strings.Repeat("x", maxEnvLine+1-len("ENV_FILE_TEST_VAR=")),
+			wantErr:     true,
+			errContains: "longer than",
+		},
+		{
+			name:    "empty value",
+			content: `ZUUL_DEFAULT_TENANT=`,
+			check: func() bool {
+				v, ok := os.LookupEnv("ZUUL_DEFAULT_TENANT")
+				return ok && v == ""
+			},
+		},
+		{
+			name:        "unterminated quote does not echo the value",
+			content:     `ZUUL_AUTH_TOKEN="s3cr3t`,
+			wantErr:     true,
+			errContains: "unterminated",
+		},
+		{
+			name:        "text after quoted value",
+			content:     `ZUUL_AUTH_TOKEN="s3cr3t" extra`,
+			wantErr:     true,
+			errContains: "after quoted value",
+		},
+		{
+			name:    "long value",
+			content: "ENV_FILE_TEST_VAR=" + strings.Repeat("x", 200<<10),
+			check: func() bool {
+				return len(os.Getenv("ENV_FILE_TEST_VAR")) == 200<<10
+			},
 		},
 	}
 
@@ -479,6 +616,8 @@ ZUUL_AUTH_TOKEN=file-token`,
 					t.Error("LoadEnvFile() expected error, got nil")
 				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
 					t.Errorf("LoadEnvFile() error = %v, want error containing %q", err, tt.errContains)
+				} else if strings.Contains(err.Error(), "s3cr3t") {
+					t.Errorf("LoadEnvFile() error leaks the value: %v", err)
 				}
 				return
 			}
@@ -498,5 +637,126 @@ ZUUL_AUTH_TOKEN=file-token`,
 func TestLoadEnvFile_FileNotFound(t *testing.T) {
 	if err := LoadEnvFile("/nonexistent/path/.env"); err == nil {
 		t.Error("LoadEnvFile() expected error for non-existent file")
+	}
+}
+
+func writeSecret(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestLoad_SecretFiles(t *testing.T) {
+	t.Run("tokens from files", func(t *testing.T) {
+		isolateEnv(t, map[string]string{
+			"ZUUL_AUTH_TOKEN_FILE":      writeSecret(t, "zuul-jwt\n"),
+			"ZUUL_HTTP_AUTH_TOKEN_FILE": writeSecret(t, "  client-token  \n"),
+		})
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.AuthToken != "zuul-jwt" || cfg.HTTPAuthToken != "client-token" {
+			t.Errorf("tokens = %q, %q", cfg.AuthToken, cfg.HTTPAuthToken)
+		}
+	})
+
+	t.Run("symlinked secret", func(t *testing.T) {
+		link := filepath.Join(t.TempDir(), "token")
+		if err := os.Symlink(writeSecret(t, "zuul-jwt"), link); err != nil {
+			t.Skipf("symlink: %v", err)
+		}
+		isolateEnv(t, map[string]string{"ZUUL_AUTH_TOKEN_FILE": link})
+		cfg, err := Load()
+		if err != nil || cfg.AuthToken != "zuul-jwt" {
+			t.Fatalf("Load() = %v, %v", cfg, err)
+		}
+	})
+
+	tests := []struct {
+		name    string
+		env     func(t *testing.T) map[string]string
+		wantErr string
+	}{
+		{"both set", func(t *testing.T) map[string]string {
+			return map[string]string{"ZUUL_AUTH_TOKEN": "s3cr3t", "ZUUL_AUTH_TOKEN_FILE": writeSecret(t, "s3cr3t")}
+		}, "only one of ZUUL_AUTH_TOKEN and ZUUL_AUTH_TOKEN_FILE"},
+		{"empty variable and file both set", func(t *testing.T) map[string]string {
+			return map[string]string{"ZUUL_HTTP_AUTH_TOKEN": "", "ZUUL_HTTP_AUTH_TOKEN_FILE": writeSecret(t, "s3cr3t")}
+		}, "only one of ZUUL_HTTP_AUTH_TOKEN and ZUUL_HTTP_AUTH_TOKEN_FILE"},
+		{"directory", func(t *testing.T) map[string]string {
+			return map[string]string{"ZUUL_AUTH_TOKEN_FILE": t.TempDir()}
+		}, "regular file"},
+		{"missing file", func(t *testing.T) map[string]string {
+			return map[string]string{"ZUUL_AUTH_TOKEN_FILE": filepath.Join(t.TempDir(), "nope")}
+		}, "reading ZUUL_AUTH_TOKEN_FILE"},
+		{"empty file", func(t *testing.T) map[string]string {
+			return map[string]string{"ZUUL_HTTP_AUTH_TOKEN_FILE": writeSecret(t, " \n")}
+		}, "ZUUL_HTTP_AUTH_TOKEN_FILE is empty"},
+		{"oversized file", func(t *testing.T) map[string]string {
+			return map[string]string{"ZUUL_AUTH_TOKEN_FILE": writeSecret(t, strings.Repeat("s3cr3t", 20<<10))}
+		}, "larger than"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolateEnv(t, tt.env(t))
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
+			}
+			if strings.Contains(err.Error(), "s3cr3t") {
+				t.Errorf("error leaks the secret: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_LogLevel(t *testing.T) {
+	base := map[string]string{"ZUUL_URL": "https://zuul.example.com"}
+	isolateEnv(t, base)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Level() != slog.LevelInfo {
+		t.Errorf("default log level = %v, want info", cfg.Level())
+	}
+
+	isolateEnv(t, map[string]string{"ZUUL_URL": base["ZUUL_URL"], "ZUUL_LOG_LEVEL": "DEBUG"})
+	if cfg, err = Load(); err != nil || cfg.Validate() != nil || cfg.Level() != slog.LevelDebug {
+		t.Errorf("Load() = %v, %v; want debug", cfg, err)
+	}
+
+	// An invalid environment value is reported by Validate, so a valid
+	// -log-level flag applied before Validate can override it.
+	isolateEnv(t, map[string]string{"ZUUL_URL": base["ZUUL_URL"], "ZUUL_LOG_LEVEL": "loud"})
+	if cfg, err = Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "ZUUL_LOG_LEVEL") {
+		t.Errorf("Validate() error = %v, want ZUUL_LOG_LEVEL error", err)
+	}
+	cfg.LogLevel = "warn"
+	if err := cfg.Validate(); err != nil || cfg.Level() != slog.LevelWarn {
+		t.Errorf("after override: Validate() = %v, Level() = %v; want nil, warn", err, cfg.Level())
+	}
+}
+
+func TestParseLogLevel(t *testing.T) {
+	for in, want := range map[string]slog.Level{
+		"debug": slog.LevelDebug, " Info ": slog.LevelInfo, "warn": slog.LevelWarn,
+		"error": slog.LevelError,
+	} {
+		if got, err := ParseLogLevel(in); err != nil || got != want {
+			t.Errorf("ParseLogLevel(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "trace", "warning", "debug+1", "-4"} {
+		if _, err := ParseLogLevel(in); err == nil {
+			t.Errorf("ParseLogLevel(%q) should fail", in)
+		}
 	}
 }
