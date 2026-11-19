@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/clappingmonkey/zuul-mcp/internal/config"
@@ -27,9 +28,11 @@ func main() {
 	transportMode := flag.String("transport", "", "Transport mode: stdio (default), http, or sse")
 	host := flag.String("host", "", "HTTP/SSE bind address (default: 127.0.0.1)")
 	port := flag.String("port", "", "HTTP/SSE server port (default: 8080)")
+	readOnly := flag.Bool("read-only", false, "Hide tools that change Zuul state (also ZUUL_READ_ONLY=true)")
 	showVersion := flag.Bool("version", false, "Show version information")
 	flag.Parse()
 
+	resolveVersion()
 	if *showVersion {
 		fmt.Printf("zuul-mcp %s (%s) built on %s\n", version, commit, date)
 		os.Exit(0)
@@ -58,12 +61,18 @@ func main() {
 	if *port != "" {
 		cfg.HTTPPort = *port
 	}
+	if *readOnly {
+		cfg.ReadOnly = true
+	}
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("Invalid configuration: %v", err)
 	}
 
 	// Create the Zuul MCP server
-	s := server.New(cfg)
+	s := server.New(cfg, version)
+	if reason := server.WriteToolsDisabledReason(cfg); reason != "" {
+		log.Printf("Tools that change Zuul state are disabled: %s", reason)
+	}
 
 	if cfg.Transport == "stdio" {
 		log.Println("Starting Zuul MCP server with stdio transport...")
@@ -87,5 +96,25 @@ func main() {
 	srv := transport.NewServer(addr, handler)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Server error: %v", err)
+	}
+}
+
+// resolveVersion fills in version information from the Go build info when
+// the binary was not stamped by the release build (e.g. `go install`).
+func resolveVersion() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	if version == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = strings.TrimPrefix(info.Main.Version, "v")
+	}
+	for _, s := range info.Settings {
+		switch {
+		case s.Key == "vcs.revision" && commit == "unknown":
+			commit = s.Value
+		case s.Key == "vcs.time" && date == "unknown":
+			date = s.Value
+		}
 	}
 }
