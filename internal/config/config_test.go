@@ -17,6 +17,7 @@ var configEnvVars = []string{
 	"ZUUL_HTTP_AUTH_TOKEN",
 	"ZUUL_HTTP_ALLOWED_ORIGINS",
 	"ZUUL_ALLOW_INSECURE_HTTP",
+	"ZUUL_READ_ONLY",
 }
 
 // isolateEnv blanks every variable the config reads; t.Setenv restores the
@@ -116,6 +117,23 @@ func TestLoad(t *testing.T) {
 				"ZUUL_ALLOW_INSECURE_HTTP": "true",
 			},
 			check: func(c *Config) bool { return c.AllowInsecureHTTP },
+		},
+		{
+			name: "read-only mode",
+			envVars: map[string]string{
+				"ZUUL_URL":        "https://zuul.example.com",
+				"ZUUL_AUTH_TOKEN": "secret-token",
+				"ZUUL_READ_ONLY":  "true",
+			},
+			check: func(c *Config) bool { return c.ReadOnly && c.HasAuth() },
+		},
+		{
+			name: "invalid ZUUL_READ_ONLY",
+			envVars: map[string]string{
+				"ZUUL_URL":       "https://zuul.example.com",
+				"ZUUL_READ_ONLY": "yes please",
+			},
+			wantErr: "ZUUL_READ_ONLY",
 		},
 	}
 

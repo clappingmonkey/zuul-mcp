@@ -53,11 +53,11 @@ func newTestServer(t *testing.T, token string) (*Server, *zuulStub) {
 	}))
 	t.Cleanup(ts.Close)
 	cfg := &config.Config{ZuulURL: ts.URL, DefaultTenant: "t", AuthToken: token}
-	return New(cfg), stub
+	return New(cfg, "test"), stub
 }
 
 func TestRegisteredTools(t *testing.T) {
-	s, _ := newTestServer(t, "")
+	s, _ := newTestServer(t, "token")
 	tools := s.MCPServer().ListTools()
 	if _, ok := tools["get_job_variants"]; ok {
 		t.Errorf("get_job_variants targets a non-existent Zuul endpoint and must not be registered")
@@ -357,7 +357,7 @@ func newLogServer(t *testing.T, log string) *Server {
 		fmt.Fprintf(w, `{"uuid":"b","log_url":%q}`, ts.URL+"/logs/b/")
 	}))
 	t.Cleanup(ts.Close)
-	return New(&config.Config{ZuulURL: ts.URL, DefaultTenant: "t"})
+	return New(&config.Config{ZuulURL: ts.URL, DefaultTenant: "t"}, "test")
 }
 
 func TestLastLines(t *testing.T) {
@@ -418,5 +418,67 @@ func TestHandleGetBuildLogs(t *testing.T) {
 		if !res.IsError {
 			t.Errorf("%v: expected error, got %q", args, resultText(t, res))
 		}
+	}
+}
+
+func TestListArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    map[string]any
+		def     int64
+		want    listPage
+		wantErr string
+	}{
+		{"defaults", map[string]any{}, 50, listPage{limit: 50}, ""},
+		{"zuul default limit", map[string]any{}, 0, listPage{}, ""},
+		{"all set", map[string]any{"change": 12345.0, "limit": 10.0, "skip": 20.0}, 50, listPage{12345, 10, 20}, ""},
+		{"numeric strings", map[string]any{"limit": "5", "skip": "1"}, 50, listPage{limit: 5, skip: 1}, ""},
+		{"null limit uses default", map[string]any{"limit": nil}, 50, listPage{limit: 50}, ""},
+		{"fractional limit", map[string]any{"limit": 2.5}, 50, listPage{}, "'limit' must be an integer"},
+		{"zero limit", map[string]any{"limit": 0.0}, 50, listPage{}, "'limit' must be an integer between 1 and 1000"},
+		{"huge limit", map[string]any{"limit": 1e9}, 50, listPage{}, "'limit'"},
+		{"negative skip", map[string]any{"skip": -1.0}, 50, listPage{}, "'skip'"},
+		{"negative change", map[string]any{"change": -3.0}, 50, listPage{}, "'change'"},
+		{"change with patchset", map[string]any{"change": "12345,1"}, 50, listPage{}, "'change'"},
+		{"bool limit", map[string]any{"limit": true}, 50, listPage{}, "'limit'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := listArgs(tt.args, tt.def)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestListHandlersRejectBadPaging(t *testing.T) {
+	s, stub := newTestServer(t, "")
+	ctx := context.Background()
+	handlers := map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error){
+		"list_builds":        s.handleListBuilds,
+		"list_buildsets":     s.handleListBuildsets,
+		"list_system_events": s.handleListSystemEvents,
+	}
+	for name, h := range handlers {
+		res, err := h(ctx, callReq(map[string]any{"limit": -1.0}))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !res.IsError || !strings.Contains(resultText(t, res), "'limit'") {
+			t.Errorf("%s: expected limit validation error, got %q", name, resultText(t, res))
+		}
+	}
+	if stub.hits != 0 {
+		t.Errorf("invalid paging must not reach Zuul, got %d requests", stub.hits)
 	}
 }

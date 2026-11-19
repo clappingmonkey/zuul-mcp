@@ -46,6 +46,24 @@ type Config struct {
 	// AllowInsecureHTTP permits sending AuthToken to a non-loopback Zuul over
 	// plain http://.
 	AllowInsecureHTTP bool
+
+	// ReadOnly hides the tools that change Zuul state even when AuthToken
+	// is set.
+	ReadOnly bool
+}
+
+// envBool parses an optional boolean environment variable (unset or empty
+// means false).
+func envBool(key string) (bool, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return false, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
+	}
+	return b, nil
 }
 
 // Load reads configuration from environment variables and applies defaults.
@@ -69,12 +87,12 @@ func Load() (*Config, error) {
 			cfg.HTTPAllowedOrigins = append(cfg.HTTPAllowedOrigins, canonical)
 		}
 	}
-	if v := os.Getenv("ZUUL_ALLOW_INSECURE_HTTP"); v != "" {
-		allow, err := strconv.ParseBool(v)
-		if err != nil {
-			return nil, fmt.Errorf("ZUUL_ALLOW_INSECURE_HTTP must be a boolean: %w", err)
-		}
-		cfg.AllowInsecureHTTP = allow
+	var err error
+	if cfg.AllowInsecureHTTP, err = envBool("ZUUL_ALLOW_INSECURE_HTTP"); err != nil {
+		return nil, err
+	}
+	if cfg.ReadOnly, err = envBool("ZUUL_READ_ONLY"); err != nil {
+		return nil, err
 	}
 
 	if cfg.Transport == "" {

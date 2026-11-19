@@ -45,15 +45,19 @@ func (s *Server) handleListBuilds(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	page, err := listArgs(req.GetArguments(), defaultListLimit)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	query := &client.BuildsQuery{
 		Project:  req.GetString("project", ""),
 		Pipeline: req.GetString("pipeline", ""),
 		Branch:   req.GetString("branch", ""),
 		Result:   req.GetString("result", ""),
 		JobName:  req.GetString("job_name", ""),
-		Change:   int(req.GetFloat("change", 0)),
-		Limit:    int(req.GetFloat("limit", 50)),
-		Skip:     int(req.GetFloat("skip", 0)),
+		Change:   page.change,
+		Limit:    page.limit,
+		Skip:     page.skip,
 	}
 
 	builds, err := s.zuulClient.ListBuilds(ctx, tenant, query)
@@ -108,14 +112,18 @@ func (s *Server) handleListBuildsets(ctx context.Context, req mcp.CallToolReques
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	page, err := listArgs(req.GetArguments(), defaultListLimit)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	query := &client.BuildsetsQuery{
 		Project:  req.GetString("project", ""),
 		Pipeline: req.GetString("pipeline", ""),
 		Branch:   req.GetString("branch", ""),
 		Result:   req.GetString("result", ""),
-		Change:   int(req.GetFloat("change", 0)),
-		Limit:    int(req.GetFloat("limit", 50)),
-		Skip:     int(req.GetFloat("skip", 0)),
+		Change:   page.change,
+		Limit:    page.limit,
+		Skip:     page.skip,
 	}
 
 	buildsets, err := s.zuulClient.ListBuildsets(ctx, tenant, query)
@@ -280,10 +288,16 @@ func (s *Server) handleListSystemEvents(ctx context.Context, req mcp.CallToolReq
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	// An omitted limit (returned as 0) leaves the page size to Zuul; an
+	// explicit limit must still be within 1..maxListLimit.
+	page, err := listArgs(req.GetArguments(), 0)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	query := &client.SystemEventsQuery{
 		EventType: req.GetString("event_type", ""),
-		Limit:     int(req.GetFloat("limit", 0)),
-		Skip:      int(req.GetFloat("skip", 0)),
+		Limit:     page.limit,
+		Skip:      page.skip,
 	}
 
 	events, err := s.zuulClient.ListSystemEvents(ctx, tenant, query)
@@ -588,6 +602,33 @@ func optInt(args map[string]any, key string, def, lo, hi int64) (int64, error) {
 		return 0, rangeErr
 	}
 	return n, nil
+}
+
+const (
+	defaultListLimit = 50
+	maxListLimit     = 1000
+)
+
+type listPage struct {
+	change, limit, skip int
+}
+
+// listArgs validates the optional change, limit and skip arguments of the
+// list tools. A zero change means no change filter.
+func listArgs(args map[string]any, defLimit int64) (listPage, error) {
+	change, err := optInt(args, "change", 0, 0, math.MaxInt32)
+	if err != nil {
+		return listPage{}, err
+	}
+	limit, err := optInt(args, "limit", defLimit, 1, maxListLimit)
+	if err != nil {
+		return listPage{}, err
+	}
+	skip, err := optInt(args, "skip", 0, 0, math.MaxInt32)
+	if err != nil {
+		return listPage{}, err
+	}
+	return listPage{change: int(change), limit: int(limit), skip: int(skip)}, nil
 }
 
 // handleGetBuildLogs handles the get_build_logs tool.
