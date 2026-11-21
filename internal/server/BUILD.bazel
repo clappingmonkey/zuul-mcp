@@ -20,6 +20,7 @@ go_library(
 go_test(
     name = "server_test",
     srcs = [
+        "read_tools_test.go",
         "server_test.go",
         "tools_test.go",
     ],
