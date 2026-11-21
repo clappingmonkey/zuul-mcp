@@ -248,7 +248,7 @@ responses. A second signal stops the server immediately.
 Example version output:
 
 ```
-zuul-mcp 0.14.1 (a1d9e05) built on 2026-11-19T10:30:00Z
+zuul-mcp v1.0.0 (618a26d) built on 2026-11-21T20:26:12Z
 ```
 
 ## Example Prompts for Claude
