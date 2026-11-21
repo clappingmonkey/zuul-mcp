@@ -42,9 +42,11 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          # Only what release-please needs: release PRs, labels, tags/releases.
+          # Only what release-please needs: contents for tags/releases and the
+          # release branch, pull-requests for the release PR and its labels.
+          # Every permission listed here must also be granted to the app's
+          # installation, or token creation fails with a 422.
           permission-contents: write
-          permission-issues: write
           permission-pull-requests: write
 
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
