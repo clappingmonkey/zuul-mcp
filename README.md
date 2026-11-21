@@ -72,10 +72,21 @@ chmod +x zuul-mcp-darwin-amd64
 sudo mv zuul-mcp-darwin-amd64 /usr/local/bin/zuul-mcp
 ```
 
+Windows: download `zuul-mcp-windows-amd64.exe` from the same page.
+
+Each release includes `checksums.txt` (SHA-256) and GitHub build provenance
+attestations. To check a downloaded binary was built by this repository's
+release workflow:
+
+```bash
+gh attestation verify zuul-mcp-linux-amd64 --repo clappingmonkey/zuul-mcp
+```
+
 ### Build from Source
 
 ```bash
-# Requires Go 1.26+
+# Requires the Go version in go.mod (1.27.4) or newer; with the default
+# GOTOOLCHAIN=auto an older go downloads it automatically.
 go install github.com/clappingmonkey/zuul-mcp/cmd/zuul-mcp@latest
 ```
 
@@ -237,7 +248,7 @@ responses. A second signal stops the server immediately.
 Example version output:
 
 ```
-zuul-mcp 0.2.0 (abc1234) built on 2024-01-15T10:30:00Z
+zuul-mcp 0.14.1 (a1d9e05) built on 2026-11-19T10:30:00Z
 ```
 
 ## Example Prompts for Claude
@@ -263,12 +274,12 @@ Once configured, you can ask Claude questions like:
 
 ## Development
 
-This project uses Bazel for building, testing, and dependency management. No `go.mod` file is needed - all dependencies are declared in `MODULE.bazel`.
+This project builds and tests with Bazel only (do not use `go build`/`go test`). Go dependencies are declared in `go.mod`/`go.sum`, which Bazel reads via `go_deps.from_file()`; Bazel module dependencies are in `MODULE.bazel`.
 
 ### Prerequisites
 
 - [Bazel](https://bazel.build/install) or [Bazelisk](https://github.com/bazelbuild/bazelisk) (recommended)
-- Go 1.26+ (for IDE support/gopls only - Bazel manages its own Go SDK)
+- Go matching the `go` line in `go.mod` (only for `go get`/`go mod tidy` and IDE/gopls support - Bazel manages its own Go SDK)
 
 ### Build
 
@@ -289,6 +300,19 @@ bazel build //cmd/zuul-mcp --config=release
 # Run all tests
 bazel test //...
 ```
+
+### Lint and Git Hooks
+
+```bash
+# golangci-lint (pinned, runs with Bazel's Go SDK)
+bazel run //tools/lint:golangci_lint -- run ./...
+
+# Install the git hooks (prek or pre-commit), or run them on demand
+prek install
+prek run --all-files
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#git-hooks-and-linting) for details.
 
 ### Regenerate BUILD files
 
