@@ -1,4 +1,4 @@
-name: Auto-approve Renovate PRs
+name: Renovate Auto-approve
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ permissions: {}
 
 jobs:
   approve:
+    name: Approve non-major update
     # The PR author and head repository identify a Renovate PR. The actor
     # check additionally skips runs where someone else pushed to the branch,
     # so their commits are never auto-approved.
