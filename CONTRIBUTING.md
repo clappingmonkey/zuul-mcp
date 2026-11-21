@@ -38,8 +38,24 @@ prek run --all-files    # or: pre-commit run --all-files
 They run file hygiene checks, `gofmt`, Gazelle, golangci-lint, gitleaks,
 actionlint, zizmor (GitHub Actions security) and a Conventional Commits check
 on the commit message. The Go hooks go through Bazel, so you don't need Go or
-golangci-lint installed. CI runs the same hooks on every pull request. To skip
-a hook once, use `SKIP=<hook-id> git commit ...`.
+golangci-lint installed. To skip a hook once locally, use
+`SKIP=<hook-id> git commit ...`.
+
+CI runs the same hooks on every pull request, plus a scan of the whole tree
+for secrets. The **Pre-commit hooks** check is required, so a skipped or
+failing hook blocks the merge. The full set of required checks on `main` is:
+
+| Check | Workflow |
+|-------|----------|
+| PR title (Conventional Commits) | `pr-checks.yaml` |
+| Bazel / Test | `pr-checks.yaml` → `reusable-bazel.yaml` |
+| Bazel / Build | `pr-checks.yaml` → `reusable-bazel.yaml` |
+| BUILD files (Gazelle) | `pr-checks.yaml` |
+| Pre-commit hooks | `pr-checks.yaml` |
+
+`Vulnerability Scan` (govulncheck) also runs on pull requests, weekly, and on
+`main`, but it is informational: a newly published advisory should not block
+unrelated PRs.
 
 golangci-lint can also be run directly (configuration in
 [`.golangci.yml`](.golangci.yml)):

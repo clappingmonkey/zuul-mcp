@@ -9,6 +9,7 @@ permissions: {}
 
 jobs:
   renovate:
+    name: Run Renovate
     runs-on: ubuntu-latest
     permissions: {}
     steps:

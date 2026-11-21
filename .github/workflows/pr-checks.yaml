@@ -1,17 +1,17 @@
-name: Test
+name: PR Checks
 
 on:
   pull_request:
 
 concurrency:
-  group: test-${{ github.ref }}
+  group: pr-checks-${{ github.ref }}
   cancel-in-progress: true
 
 permissions: {}
 
 jobs:
   pr-title:
-    name: PR Title (Conventional Commits)
+    name: PR title (Conventional Commits)
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -20,17 +20,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  ci:
-    name: CI
+  bazel:
+    name: Bazel
     permissions:
       contents: read
-    uses: ./.github/workflows/bazel-ci.yaml # zizmor: ignore[self-repository] -- local reusable workflow, versioned with this commit
+    uses: ./.github/workflows/reusable-bazel.yaml # zizmor: ignore[self-repository] -- local reusable workflow, versioned with this commit
     with:
       run-tests: true
       run-build: true
 
   gazelle:
-    name: Gazelle
+    name: BUILD files (Gazelle)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,8 +55,8 @@ jobs:
             exit 1
           fi
 
-  hooks:
-    name: Hooks and lint (prek)
+  pre-commit:
+    name: Pre-commit hooks
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -74,7 +74,8 @@ jobs:
 
       # Runs every hook in .pre-commit-config.yaml, including golangci-lint.
       # Gazelle has its own job above.
-      - uses: j178/prek-action@7b101f8338a08d2bd6fdb3625e4e7692428763a3 # v3.1.1
+      - name: Run pre-commit hooks (prek)
+        uses: j178/prek-action@7b101f8338a08d2bd6fdb3625e4e7692428763a3 # v3.1.1
         with:
           prek-version: "0.5.11"
         env:
