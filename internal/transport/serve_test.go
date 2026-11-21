@@ -115,7 +115,7 @@ func TestServe_GivesUpOnStuckHandlers(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	started := make(chan struct{})
-	url, cancel, done := startServe(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	url, cancel, done := startServe(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		close(started)
 		<-release // ignores its context
 	}))

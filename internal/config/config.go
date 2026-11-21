@@ -91,12 +91,14 @@ func envSecret(key string) (string, error) {
 	// The path is checked first, then opened without blocking where the OS
 	// supports it, and the opened file is checked again in case it changed.
 	notRegular := fmt.Errorf("%s_FILE must point to a regular file", key)
-	if info, err := os.Stat(path); err != nil {
+	// The path comes from the operator's own environment, so reading it is
+	// the point rather than a traversal risk.
+	if info, err := os.Stat(path); err != nil { //nolint:gosec // operator-supplied path
 		return "", fmt.Errorf("reading %s_FILE: %w", key, err)
 	} else if !info.Mode().IsRegular() {
 		return "", notRegular
 	}
-	f, err := os.OpenFile(path, secretOpenFlags, 0)
+	f, err := os.OpenFile(path, secretOpenFlags, 0) //nolint:gosec // operator-supplied path
 	if err != nil {
 		return "", fmt.Errorf("reading %s_FILE: %w", key, err)
 	}

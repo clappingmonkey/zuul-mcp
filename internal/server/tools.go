@@ -35,7 +35,7 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 }
 
 // handleListTenants handles the list_tenants tool.
-func (s *Server) handleListTenants(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleListTenants(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	tenants, err := s.zuulClient.ListTenants(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list tenants: %v", err)), nil
@@ -377,7 +377,7 @@ func (s *Server) handleListLabels(ctx context.Context, req mcp.CallToolRequest) 
 
 // handleListConnections handles the list_connections tool.
 // TODO: Return typed Connection objects once the Zuul API response schema is verified.
-func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleListConnections(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	connections, err := s.zuulClient.ListConnections(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list connections: %v", err)), nil
@@ -386,7 +386,7 @@ func (s *Server) handleListConnections(ctx context.Context, req mcp.CallToolRequ
 }
 
 // handleListComponents handles the list_components tool.
-func (s *Server) handleListComponents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleListComponents(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	components, err := s.zuulClient.ListComponents(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list components: %v", err)), nil

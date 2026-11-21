@@ -1,0 +1,36 @@
+# golangci-lint v2 configuration.
+# Run: bazel run //tools/lint:golangci_lint -- run ./...
+version: "2"
+
+run:
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - revive
+  exclusions:
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      # Test fixtures write to httptest recorders, use fake credentials and
+      # request local test servers; these checks are noise there.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+      # HTTP fixtures implement http.HandlerFunc and often ignore the request.
+      - path: _test\.go
+        linters:
+          - revive
+        text: unused-parameter
+
+formatters:
+  enable:
+    - gofmt

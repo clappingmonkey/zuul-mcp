@@ -117,7 +117,7 @@ func TestAuthHeader(t *testing.T) {
 }
 
 func TestErrorResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("tenant not found"))
 	}))
@@ -183,7 +183,7 @@ func logFixture(t *testing.T, logHandler http.HandlerFunc) (*Client, *http.Reque
 		logHandler(w, r)
 	}))
 	t.Cleanup(logSrv.Close)
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"uuid":"b","log_url":%q}`, logSrv.URL+"/logs/b/")
 	}))
@@ -192,7 +192,7 @@ func logFixture(t *testing.T, logHandler http.HandlerFunc) (*Client, *http.Reque
 }
 
 func TestGetBuildLogs_NeverSendsToken(t *testing.T) {
-	c, got := logFixture(t, func(w http.ResponseWriter, r *http.Request) {
+	c, got := logFixture(t, func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "ok\n")
 	})
 	if _, err := c.GetBuildLogs(context.Background(), "t", "b", 1000); err != nil {

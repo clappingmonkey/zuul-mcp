@@ -13,7 +13,7 @@ func TestZuulTimeUnmarshal_RFC3339(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := time.Date(2026, 3, 6, 7, 24, 19, 0, time.UTC)
-	if !zt.Time.Equal(expected) {
+	if !zt.Equal(expected) {
 		t.Errorf("expected %v, got %v", expected, zt.Time)
 	}
 }
@@ -38,12 +38,12 @@ func TestZuulTimeUnmarshal_ZuulFormat(t *testing.T) {
 	}
 	// Should be parsed as UTC
 	expected := time.Date(2026, 3, 6, 7, 24, 19, 0, time.UTC)
-	if !zt.Time.Equal(expected) {
+	if !zt.Equal(expected) {
 		t.Errorf("expected %v, got %v", expected, zt.Time)
 	}
 	// Verify it's UTC
-	if zt.Time.Location() != time.UTC {
-		t.Errorf("expected UTC location, got %v", zt.Time.Location())
+	if zt.Location() != time.UTC {
+		t.Errorf("expected UTC location, got %v", zt.Location())
 	}
 }
 
@@ -54,7 +54,7 @@ func TestZuulTimeUnmarshal_FractionalNoZone(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := time.Date(2026, 3, 6, 7, 24, 19, 123456000, time.UTC)
-	if !zt.Time.Equal(expected) {
+	if !zt.Equal(expected) {
 		t.Errorf("expected %v, got %v", expected, zt.Time)
 	}
 }

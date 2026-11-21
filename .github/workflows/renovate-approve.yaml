@@ -4,14 +4,27 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+permissions: {}
+
 jobs:
   approve:
-    if: github.actor == 'renovate-boto[bot]' && !contains(github.event.pull_request.labels.*.name, 'major')
+    # The PR author and head repository identify a Renovate PR. The actor
+    # check additionally skips runs where someone else pushed to the branch,
+    # so their commits are never auto-approved.
+    if: >- # zizmor: ignore[bot-conditions] -- ANDed with the PR author check; only narrows
+      github.event.pull_request.user.login == 'renovate-boto[bot]' &&
+      github.actor == 'renovate-boto[bot]' &&
+      github.triggering_actor == 'renovate-boto[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(github.event.pull_request.labels.*.name, 'major')
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Approve PR
-        run: |
-          gh pr review ${{ github.event.pull_request.number }} --approve --repo ${{ github.repository }}
-          gh pr comment ${{ github.event.pull_request.number }} --body "Auto-approved: this is a non-major Renovate update. Will merge once all status checks pass." --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.RENOVATE_APPROVE_PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review "${PR_NUMBER}" --approve --repo "${GITHUB_REPOSITORY}"
+          gh pr comment "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --body "Auto-approved: this is a non-major Renovate update. Will merge once all status checks pass."

@@ -9,8 +9,14 @@
     'bazelisk',
     'gomod',
     'github-actions',
+    'pre-commit',
     'custom.regex',
   ],
+  // The pre-commit manager is opt-in; it updates the hook revs (kept as
+  // SHA + '# frozen: vX' comments) in .pre-commit-config.yaml.
+  'pre-commit': {
+    enabled: true,
+  },
   platformAutomerge: true,
   platformCommit: 'enabled',
   prHourlyLimit: 4,
@@ -113,6 +119,17 @@
       labels: [
         'dependencies',
         'github-actions',
+      ],
+    },
+    {
+      description: 'Group git hook (pre-commit/prek) updates',
+      matchManagers: [
+        'pre-commit',
+      ],
+      groupName: 'git hooks',
+      labels: [
+        'dependencies',
+        'pre-commit',
       ],
     },
     {
