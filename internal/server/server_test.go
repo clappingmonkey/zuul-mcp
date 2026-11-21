@@ -181,6 +181,8 @@ func TestNumericSchemas(t *testing.T) {
 		{"list_buildsets", "change", 0, maxInt32, nil},
 		{"list_buildsets", "limit", 1, 1000, float64(defaultListLimit)},
 		{"list_buildsets", "skip", 0, maxInt32, nil},
+		{"get_config_errors", "limit", 1, 1000, float64(defaultListLimit)},
+		{"get_config_errors", "skip", 0, maxInt32, nil},
 		{"list_system_events", "limit", 1, 1000, nil},
 		{"list_system_events", "skip", 0, maxInt32, nil},
 		{"get_build_logs", "tail_lines", 0, maxInt32, nil},
@@ -193,6 +195,19 @@ func TestNumericSchemas(t *testing.T) {
 		if p["type"] != "integer" || p["minimum"] != tt.min || p["maximum"] != tt.max || p["default"] != tt.def {
 			t.Errorf("%s.%s schema = %v, want integer [%v, %v] default %v", tt.tool, tt.prop, p, tt.min, tt.max, tt.def)
 		}
+	}
+}
+
+func TestConfigErrorsSchema(t *testing.T) {
+	s := New(&config.Config{ZuulURL: "http://zuul.test"}, "test")
+	for _, prop := range []string{"tenant", "project", "branch", "severity", "name"} {
+		if typ := schemaProperty(t, s, "get_config_errors", prop)["type"]; typ != "string" {
+			t.Errorf("get_config_errors.%s type = %v, want string", prop, typ)
+		}
+	}
+	enum, _ := schemaProperty(t, s, "get_config_errors", "severity")["enum"].([]any)
+	if len(enum) != 2 || enum[0] != "error" || enum[1] != "warning" {
+		t.Errorf("get_config_errors.severity enum = %v, want [error warning]", enum)
 	}
 }
 

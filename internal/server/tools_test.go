@@ -468,14 +468,17 @@ func TestListHandlersRejectBadPaging(t *testing.T) {
 		"list_builds":        s.handleListBuilds,
 		"list_buildsets":     s.handleListBuildsets,
 		"list_system_events": s.handleListSystemEvents,
+		"get_config_errors":  s.handleGetConfigErrors,
 	}
 	for name, h := range handlers {
-		res, err := h(ctx, callReq(map[string]any{"limit": -1.0}))
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if !res.IsError || !strings.Contains(resultText(t, res), "'limit'") {
-			t.Errorf("%s: expected limit validation error, got %q", name, resultText(t, res))
+		for arg, value := range map[string]float64{"limit": -1, "skip": -1} {
+			res, err := h(ctx, callReq(map[string]any{"tenant": "t", arg: value}))
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if !res.IsError || !strings.Contains(resultText(t, res), "'"+arg+"'") {
+				t.Errorf("%s: expected %s validation error, got %q", name, arg, resultText(t, res))
+			}
 		}
 	}
 	if stub.hits != 0 {

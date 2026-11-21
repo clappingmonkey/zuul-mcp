@@ -141,11 +141,14 @@ type SourceContext struct {
 
 // Pipeline represents a Zuul pipeline.
 type Pipeline struct {
-	Name             string `json:"name"`
-	Description      string `json:"description,omitempty"`
-	Manager          string `json:"manager,omitempty"`
-	Precedence       string `json:"precedence,omitempty"`
-	TriggerEventType string `json:"trigger_event_type,omitempty"`
+	Name     string            `json:"name"`
+	Triggers []PipelineTrigger `json:"triggers,omitempty"`
+}
+
+// PipelineTrigger identifies a trigger of a pipeline.
+type PipelineTrigger struct {
+	Name   string `json:"name"`
+	Driver string `json:"driver"`
 }
 
 // Project represents a Zuul project.
@@ -203,6 +206,8 @@ type ConfigError struct {
 	SourceContext *SourceContext `json:"source_context,omitempty"`
 	Error         string         `json:"error"`
 	ShortError    string         `json:"short_error,omitempty"`
+	Severity      string         `json:"severity,omitempty"`
+	Name          string         `json:"name,omitempty"`
 }
 
 // ComponentInfo represents a single Zuul component instance.

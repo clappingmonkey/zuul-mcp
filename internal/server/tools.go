@@ -54,12 +54,16 @@ func (s *Server) handleListBuilds(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	f, err := optFilters(req.GetArguments(), "project", "pipeline", "branch", "result", "job_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	query := &client.BuildsQuery{
-		Project:  req.GetString("project", ""),
-		Pipeline: req.GetString("pipeline", ""),
-		Branch:   req.GetString("branch", ""),
-		Result:   req.GetString("result", ""),
-		JobName:  req.GetString("job_name", ""),
+		Project:  f["project"],
+		Pipeline: f["pipeline"],
+		Branch:   f["branch"],
+		Result:   f["result"],
+		JobName:  f["job_name"],
 		Change:   page.change,
 		Limit:    page.limit,
 		Skip:     page.skip,
@@ -121,11 +125,15 @@ func (s *Server) handleListBuildsets(ctx context.Context, req mcp.CallToolReques
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	f, err := optFilters(req.GetArguments(), "project", "pipeline", "branch", "result")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	query := &client.BuildsetsQuery{
-		Project:  req.GetString("project", ""),
-		Pipeline: req.GetString("pipeline", ""),
-		Branch:   req.GetString("branch", ""),
-		Result:   req.GetString("result", ""),
+		Project:  f["project"],
+		Pipeline: f["pipeline"],
+		Branch:   f["branch"],
+		Result:   f["result"],
 		Change:   page.change,
 		Limit:    page.limit,
 		Skip:     page.skip,
@@ -279,11 +287,32 @@ func (s *Server) handleGetConfigErrors(ctx context.Context, req mcp.CallToolRequ
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	errors, err := s.zuulClient.GetConfigErrors(ctx, tenant)
+	args := req.GetArguments()
+	page, err := listArgs(args, defaultListLimit)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	filters, err := optFilters(args, "project", "branch", "severity", "name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if sev := filters["severity"]; sev != "" && sev != "error" && sev != "warning" {
+		return mcp.NewToolResultError("'severity' must be 'error' or 'warning'"), nil
+	}
+	query := &client.ConfigErrorsQuery{
+		Project:  filters["project"],
+		Branch:   filters["branch"],
+		Severity: filters["severity"],
+		Name:     filters["name"],
+		Limit:    page.limit,
+		Skip:     page.skip,
+	}
+
+	configErrors, err := s.zuulClient.GetConfigErrors(ctx, tenant, query)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get config errors: %v", err)), nil
 	}
-	return jsonResult(errors)
+	return jsonResult(configErrors)
 }
 
 // handleListSystemEvents handles the list_system_events tool.
@@ -299,8 +328,12 @@ func (s *Server) handleListSystemEvents(ctx context.Context, req mcp.CallToolReq
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	eventType, err := optFilter(req.GetArguments(), "event_type")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	query := &client.SystemEventsQuery{
-		EventType: req.GetString("event_type", ""),
+		EventType: eventType,
 		Limit:     page.limit,
 		Skip:      page.skip,
 	}
@@ -576,6 +609,34 @@ func optString(args map[string]any, key string) (string, error) {
 		return "", fmt.Errorf("'%s' must not be blank; omit it instead", key)
 	}
 	return s, nil
+}
+
+// optFilter reads an optional string filter of a read-only query. Absent,
+// null or blank yields "" (no filter); any other non-string is an error so
+// that a mistyped filter is not silently dropped.
+func optFilter(args map[string]any, key string) (string, error) {
+	v, ok := args[key]
+	if !ok || v == nil {
+		return "", nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("'%s' must be a string", key)
+	}
+	return strings.TrimSpace(s), nil
+}
+
+// optFilters reads several optional string filters with optFilter.
+func optFilters(args map[string]any, keys ...string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, key := range keys {
+		v, err := optFilter(args, key)
+		if err != nil {
+			return nil, err
+		}
+		out[key] = v
+	}
+	return out, nil
 }
 
 // optInt reads an optional integer argument within [lo, hi]. Absent or null

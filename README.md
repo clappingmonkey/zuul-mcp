@@ -22,7 +22,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `get_project` - Get project details
   - `get_tenant_status` - Get overall tenant status
   - `get_change_status` - Get pipeline status for a specific change
-  - `get_config_errors` - Get configuration errors
+  - `get_config_errors` - Get configuration errors and warnings (filterable, paged)
   - `list_system_events` - List system events (config updates, reconfigurations)
   - `list_nodes` - List nodepool nodes
   - `list_labels` - List available node labels

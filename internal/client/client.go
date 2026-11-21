@@ -718,10 +718,9 @@ func (c *Client) GetPipelineStatus(ctx context.Context, tenant, pipeline string)
 		var p struct {
 			Name string `json:"name"`
 		}
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, fmt.Errorf("decoding pipeline status: %w", err)
-		}
-		if p.Name == pipeline {
+		// The payload is unstable: skip entries of an unexpected shape
+		// instead of failing the lookup of a different pipeline.
+		if json.Unmarshal(raw, &p) == nil && p.Name == pipeline {
 			return raw, nil
 		}
 	}
@@ -747,15 +746,49 @@ func (c *Client) GetChangeStatus(ctx context.Context, tenant, change string) ([]
 	return pipelines, nil
 }
 
+// ConfigErrorsQuery holds optional filters for listing configuration errors.
+// zuul-web pages this endpoint (50 entries by default).
+type ConfigErrorsQuery struct {
+	Project  string
+	Branch   string
+	Severity string
+	Name     string
+	Limit    int
+	Skip     int
+}
+
 // GetConfigErrors returns configuration errors for a tenant.
-func (c *Client) GetConfigErrors(ctx context.Context, tenant string) ([]models.ConfigError, error) {
+func (c *Client) GetConfigErrors(ctx context.Context, tenant string, query *ConfigErrorsQuery) ([]models.ConfigError, error) {
 	path := fmt.Sprintf("/api/tenant/%s/config-errors", url.PathEscape(tenant))
 
-	var errors []models.ConfigError
-	if err := c.get(ctx, path, &errors); err != nil {
+	if query != nil {
+		params := url.Values{}
+		for key, value := range map[string]string{
+			"project":  query.Project,
+			"branch":   query.Branch,
+			"severity": query.Severity,
+			"name":     query.Name,
+		} {
+			if value != "" {
+				params.Set(key, value)
+			}
+		}
+		if query.Limit > 0 {
+			params.Set("limit", strconv.Itoa(query.Limit))
+		}
+		if query.Skip > 0 {
+			params.Set("skip", strconv.Itoa(query.Skip))
+		}
+		if len(params) > 0 {
+			path += "?" + params.Encode()
+		}
+	}
+
+	var configErrors []models.ConfigError
+	if err := c.get(ctx, path, &configErrors); err != nil {
 		return nil, fmt.Errorf("getting config errors: %w", err)
 	}
-	return errors, nil
+	return configErrors, nil
 }
 
 // SystemEventsQuery holds optional query parameters for listing system events.

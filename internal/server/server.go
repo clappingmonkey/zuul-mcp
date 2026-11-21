@@ -415,9 +415,33 @@ func (s *Server) registerTools() {
 	// Get config errors
 	s.addTool(
 		mcp.NewTool("get_config_errors",
-			mcp.WithDescription("Get configuration errors for a tenant"),
+			mcp.WithDescription("Get configuration errors and warnings for a tenant. Results are paged; use skip to fetch more."),
 			mcp.WithString("tenant",
 				mcp.Description("Tenant name (uses default if not specified)"),
+			),
+			mcp.WithString("project",
+				mcp.Description("Filter by project name"),
+			),
+			mcp.WithString("branch",
+				mcp.Description("Filter by branch name"),
+			),
+			mcp.WithString("severity",
+				mcp.Description("Filter by severity"),
+				mcp.Enum("error", "warning"),
+			),
+			mcp.WithString("name",
+				mcp.Description("Filter by error name"),
+			),
+			mcp.WithInteger("limit",
+				mcp.Description("Maximum number of results to return (default 50, max 1000); a full page may mean more errors exist"),
+				mcp.DefaultNumber(defaultListLimit),
+				mcp.Min(1),
+				mcp.Max(maxListLimit),
+			),
+			mcp.WithInteger("skip",
+				mcp.Description("Number of results to skip for pagination"),
+				mcp.Min(0),
+				mcp.Max(math.MaxInt32),
 			),
 		),
 		s.handleGetConfigErrors,
@@ -655,9 +679,14 @@ func (s *Server) registerTools() {
 	)
 }
 
-// getTenant returns the tenant from request or falls back to default.
+// getTenant returns the tenant from the request, falling back to the default
+// when it is absent, null or blank. A non-string tenant is an error rather
+// than a silent fall back to the default tenant.
 func (s *Server) getTenant(req mcp.CallToolRequest) (string, error) {
-	tenant := req.GetString("tenant", "")
+	tenant, err := optFilter(req.GetArguments(), "tenant")
+	if err != nil {
+		return "", err
+	}
 	if tenant != "" {
 		return tenant, nil
 	}

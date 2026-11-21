@@ -863,6 +863,28 @@ func TestGetPipelineStatus(t *testing.T) {
 	}
 }
 
+func TestGetPipelineStatus_SkipsUndecodableEntries(t *testing.T) {
+	const gate = `{"name":"gate","change_queues":[{"name":"q","heads":[]}]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"pipelines":[[],"check",{"name":42},null,`+gate+`]}`)
+	}))
+	defer server.Close()
+	c := New(&config.Config{ZuulURL: server.URL})
+
+	status, err := c.GetPipelineStatus(context.Background(), "t", "gate")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(status) != gate {
+		t.Errorf("status = %s, want %s unchanged", status, gate)
+	}
+
+	_, err = c.GetPipelineStatus(context.Background(), "t", "check")
+	if !errors.Is(err, ErrPipelineNotFound) {
+		t.Errorf("only malformed entries: got %v, want ErrPipelineNotFound", err)
+	}
+}
+
 func TestListAutoholds(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tenant/test-tenant/autohold" {
