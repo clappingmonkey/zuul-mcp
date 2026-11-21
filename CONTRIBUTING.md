@@ -7,7 +7,8 @@ Contributions are welcome! This document explains how to get started.
 ### Prerequisites
 
 - [Bazel](https://bazel.build/install) or [Bazelisk](https://github.com/bazelbuild/bazelisk) (recommended)
-- Go 1.26+ (for `go get`/`go mod tidy` and IDE/gopls support — Bazel manages its own Go SDK)
+- Go matching the `go` line in `go.mod` (only for `go get`/`go mod tidy` and IDE/gopls support — Bazel manages its own Go SDK)
+- Optional: [prek](https://github.com/j178/prek) or [pre-commit](https://pre-commit.com) for the git hooks below
 
 ### Build & Test
 
@@ -23,6 +24,33 @@ bazel run //:gazelle                 # regenerate BUILD files
 - Go dependencies are managed via `go.mod`/`go.sum` (consumed by Bazel via `go_deps.from_file()`)
 - Bazel module dependencies (`bazel_dep`) are declared in `MODULE.bazel`
 
+## Git Hooks and Linting
+
+The hooks live in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) and work
+with either [prek](https://github.com/j178/prek) (a fast, single-binary
+drop-in) or [pre-commit](https://pre-commit.com):
+
+```bash
+prek install            # or: pre-commit install  (installs pre-commit and commit-msg hooks)
+prek run --all-files    # or: pre-commit run --all-files
+```
+
+They run file hygiene checks, `gofmt`, Gazelle, golangci-lint, gitleaks,
+actionlint, zizmor (GitHub Actions security) and a Conventional Commits check
+on the commit message. The Go hooks go through Bazel, so you don't need Go or
+golangci-lint installed. CI runs the same hooks on every pull request. To skip
+a hook once, use `SKIP=<hook-id> git commit ...`.
+
+golangci-lint can also be run directly (configuration in
+[`.golangci.yml`](.golangci.yml)):
+
+```bash
+bazel run //tools/lint:golangci_lint -- run ./...
+```
+
+The golangci-lint release is pinned by version and sha256 in `MODULE.bazel`;
+Renovate does not update it, so bump the version and all four hashes together.
+
 ## Adding a Dependency
 
 1. `go get <dep>@<version>`
@@ -36,7 +64,7 @@ bazel run //:gazelle                 # regenerate BUILD files
 1. Fork the repository
 2. Create a feature branch off `main`
 3. Make your changes (one logical change per PR)
-4. Ensure `bazel test //...` passes
+4. Ensure `bazel test //...` and the hooks (`prek run --all-files`) pass
 5. Run `bazel run //:gazelle` if you added/changed Go files
 6. Commit with a [Conventional Commits](https://www.conventionalcommits.org/) message
 7. Open a pull request using the [PR template](.github/PULL_REQUEST_TEMPLATE.md)

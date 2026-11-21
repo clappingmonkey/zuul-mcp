@@ -1,0 +1,64 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# Runs golangci-lint against the workspace using Bazel's hermetic Go SDK:
+#   bazel run //tools/lint:golangci_lint -- run ./...
+# Configuration lives in //:.golangci.yml.
+
+config_setting(
+    name = "darwin_amd64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "darwin_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+config_setting(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+alias(
+    name = "golangci_lint_bin",
+    actual = select(
+        {
+            ":darwin_amd64": "@golangci_lint_darwin_amd64//:golangci-lint",
+            ":darwin_arm64": "@golangci_lint_darwin_arm64//:golangci-lint",
+            ":linux_amd64": "@golangci_lint_linux_amd64//:golangci-lint",
+            ":linux_arm64": "@golangci_lint_linux_arm64//:golangci-lint",
+        },
+        no_match_error = "golangci-lint is only wired up for macOS and Linux on amd64/arm64",
+    ),
+)
+
+sh_binary(
+    name = "golangci_lint",
+    srcs = ["golangci_lint.sh"],
+    data = [
+        ":golangci_lint_bin",
+        "@rules_go//go",
+    ],
+    env = {
+        "GO_RLOCATION": "$(rlocationpath @rules_go//go)",
+        "GOLANGCI_LINT_RLOCATION": "$(rlocationpath :golangci_lint_bin)",
+    },
+    deps = ["@rules_shell//shell/runfiles"],
+)

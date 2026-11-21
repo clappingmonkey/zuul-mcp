@@ -164,7 +164,7 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-const strongToken = "0123456789abcdef0123456789abcdef"
+const strongToken = "0123456789abcdef0123456789abcdef" // gitleaks:allow (test fixture)
 
 func TestValidate(t *testing.T) {
 	valid := func() Config {
@@ -612,11 +612,12 @@ ZUUL_HTTP_HOST='a # b'`,
 			err := LoadEnvFile(envFile)
 
 			if tt.wantErr {
-				if err == nil {
+				switch {
+				case err == nil:
 					t.Error("LoadEnvFile() expected error, got nil")
-				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+				case tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains):
 					t.Errorf("LoadEnvFile() error = %v, want error containing %q", err, tt.errContains)
-				} else if strings.Contains(err.Error(), "s3cr3t") {
+				case strings.Contains(err.Error(), "s3cr3t"):
 					t.Errorf("LoadEnvFile() error leaks the value: %v", err)
 				}
 				return
@@ -747,7 +748,7 @@ func TestLoad_LogLevel(t *testing.T) {
 
 func TestParseLogLevel(t *testing.T) {
 	for in, want := range map[string]slog.Level{
-		"debug": slog.LevelDebug, " Info ": slog.LevelInfo, "warn": slog.LevelWarn,
+		"debug": slog.LevelDebug, " Info ": slog.LevelInfo, "warn": slog.LevelWarn, //nolint:gocritic // checks trimming and case folding
 		"error": slog.LevelError,
 	} {
 		if got, err := ParseLogLevel(in); err != nil || got != want {

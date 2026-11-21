@@ -7,11 +7,14 @@ concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   pr-title:
     name: PR Title (Conventional Commits)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: read
     steps:
       - uses: amannn/action-semantic-pull-request@c5e23b7e584519ee15caa684cf60d056aa9f035f # v6
         env:
@@ -19,7 +22,9 @@ jobs:
 
   ci:
     name: CI
-    uses: ./.github/workflows/bazel-ci.yaml
+    permissions:
+      contents: read
+    uses: ./.github/workflows/bazel-ci.yaml # zizmor: ignore[self-repository] -- local reusable workflow, versioned with this commit
     with:
       run-tests: true
       run-build: true
@@ -27,8 +32,12 @@ jobs:
   gazelle:
     name: Gazelle
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@f34d6a05eae3c24acab7fa54587492daeaeffdab # 0.19.2
@@ -45,3 +54,33 @@ jobs:
             git diff
             exit 1
           fi
+
+  hooks:
+    name: Hooks and lint (prek)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bazel
+        uses: bazel-contrib/setup-bazel@f34d6a05eae3c24acab7fa54587492daeaeffdab # 0.19.2
+        with:
+          bazelisk-cache: true
+          disk-cache: bazel-${{ github.ref_name }}-${{ hashFiles('MODULE.bazel.lock') }}
+          repository-cache: true
+
+      # Runs every hook in .pre-commit-config.yaml, including golangci-lint.
+      # Gazelle has its own job above.
+      - uses: j178/prek-action@7b101f8338a08d2bd6fdb3625e4e7692428763a3 # v3.1.1
+        with:
+          prek-version: "0.5.11"
+        env:
+          SKIP: gazelle
+
+      # The pre-commit gitleaks hook only scans staged changes, so scan the
+      # checked-out tree as well.
+      - name: Scan the tree for secrets
+        run: prek run --hook-stage manual --all-files --show-diff-on-failure gitleaks-tree

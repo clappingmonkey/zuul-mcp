@@ -56,7 +56,7 @@ func (zt ZuulTime) MarshalJSON() ([]byte, error) {
 	if zt.IsZero() {
 		return []byte("null"), nil
 	}
-	return []byte(fmt.Sprintf("%q", zt.Time.Format(time.RFC3339))), nil
+	return []byte(fmt.Sprintf("%q", zt.Format(time.RFC3339))), nil
 }
 
 // Tenant represents a Zuul tenant.

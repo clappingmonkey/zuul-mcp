@@ -24,13 +24,19 @@ on:
         description: Name of the uploaded artifact containing binaries
         value: ${{ jobs.collect.outputs.artifact-name }}
 
+permissions: {}
+
 jobs:
   test:
     name: Test
     if: inputs.run-tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@f34d6a05eae3c24acab7fa54587492daeaeffdab # 0.19.2
@@ -44,13 +50,17 @@ jobs:
 
   build:
     name: Build
-    if: inputs.run-build
     needs: [test]
-    # Run even if test was skipped (when run-tests is false)
-    # But fail if test actually failed
+    # Runs when test passed or was skipped (run-tests: false), never after a
+    # failed or cancelled test job.
+    if: ${{ !cancelled() && inputs.run-build && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@f34d6a05eae3c24acab7fa54587492daeaeffdab # 0.19.2
@@ -66,6 +76,8 @@ jobs:
     name: Build ${{ matrix.platform.config }}
     if: inputs.publish-platforms != ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -74,19 +86,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@f34d6a05eae3c24acab7fa54587492daeaeffdab # 0.19.2
         with:
+          # No disk or repository cache for release binaries, so they are
+          # built from a clean state. The bazelisk cache only holds the Bazel
+          # binary itself, which Bazelisk verifies by checksum.
           bazelisk-cache: true
-          disk-cache: bazel-${{ github.ref_name }}-${{ hashFiles('MODULE.bazel.lock') }}
-          repository-cache: true
 
       - name: Build binary
+        env:
+          CONFIG: ${{ matrix.platform.config }}
+          EXT: ${{ matrix.platform.ext }}
+          OUTPUT: ${{ matrix.platform.output }}
         run: |
-          bazel build //cmd/zuul-mcp --config=${{ matrix.platform.config }} --config=ci --config=release
+          bazel build //cmd/zuul-mcp --config="${CONFIG}" --config=ci --config=release
           mkdir -p dist
-          cp bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp${{ matrix.platform.ext }} dist/${{ matrix.platform.output }}
+          cp "bazel-bin/cmd/zuul-mcp/zuul-mcp_/zuul-mcp${EXT}" "dist/${OUTPUT}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -100,6 +118,7 @@ jobs:
     if: inputs.publish-platforms != ''
     needs: [publish]
     runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       artifact-name: dist-${{ inputs.tag-name }}
     steps:
@@ -111,12 +130,10 @@ jobs:
           merge-multiple: true
 
       - name: Create checksums
+        working-directory: dist
         run: |
-          cd dist
-          sha256sum * > checksums.txt
-          echo "Contents of dist:"
+          sha256sum -- * > checksums.txt
           ls -la
-          echo "Checksums:"
           cat checksums.txt
 
       - name: Upload combined artifact

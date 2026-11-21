@@ -12,6 +12,9 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_go", version = "0.65.0")
 bazel_dep(name = "gazelle", version = "0.54.0")
 
+# Shell rules (golangci-lint wrapper in //tools/lint)
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
 # Go toolchain
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.27.4")
@@ -22,4 +25,45 @@ go_deps.from_file(go_mod = "//:go.mod")
 use_repo(
     go_deps,
     "com_github_mark3labs_mcp_go",
+)
+
+# golangci-lint: official release binaries, pinned by sha256 from the release's
+# golangci-lint-<version>-checksums.txt. Bump the version and all four hashes
+# together. Run with: bazel run //tools/lint:golangci_lint -- run ./...
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+GOLANGCI_LINT_VERSION = "2.15.0"
+
+GOLANGCI_LINT_BUILD = 'exports_files(["golangci-lint"])'
+
+http_archive(
+    name = "golangci_lint_darwin_amd64",
+    build_file_content = GOLANGCI_LINT_BUILD,
+    sha256 = "767b899a28285e88ded2823d5dcc4bc5ef681173eb2d80f029a7b17ee4ece3b8",
+    strip_prefix = "golangci-lint-%s-darwin-amd64" % GOLANGCI_LINT_VERSION,
+    url = "https://github.com/golangci/golangci-lint/releases/download/v%s/golangci-lint-%s-darwin-amd64.tar.gz" % (GOLANGCI_LINT_VERSION, GOLANGCI_LINT_VERSION),
+)
+
+http_archive(
+    name = "golangci_lint_darwin_arm64",
+    build_file_content = GOLANGCI_LINT_BUILD,
+    sha256 = "d1e409481a8ca846c4bc97e781eb5cb1bd5c23353a0b3977a1cbda1b1b6447d5",
+    strip_prefix = "golangci-lint-%s-darwin-arm64" % GOLANGCI_LINT_VERSION,
+    url = "https://github.com/golangci/golangci-lint/releases/download/v%s/golangci-lint-%s-darwin-arm64.tar.gz" % (GOLANGCI_LINT_VERSION, GOLANGCI_LINT_VERSION),
+)
+
+http_archive(
+    name = "golangci_lint_linux_amd64",
+    build_file_content = GOLANGCI_LINT_BUILD,
+    sha256 = "9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea",
+    strip_prefix = "golangci-lint-%s-linux-amd64" % GOLANGCI_LINT_VERSION,
+    url = "https://github.com/golangci/golangci-lint/releases/download/v%s/golangci-lint-%s-linux-amd64.tar.gz" % (GOLANGCI_LINT_VERSION, GOLANGCI_LINT_VERSION),
+)
+
+http_archive(
+    name = "golangci_lint_linux_arm64",
+    build_file_content = GOLANGCI_LINT_BUILD,
+    sha256 = "b4d8f17068b35ee6060cc2f69a16fb48740d706fbba81661c318649c114a6998",
+    strip_prefix = "golangci-lint-%s-linux-arm64" % GOLANGCI_LINT_VERSION,
+    url = "https://github.com/golangci/golangci-lint/releases/download/v%s/golangci-lint-%s-linux-arm64.tar.gz" % (GOLANGCI_LINT_VERSION, GOLANGCI_LINT_VERSION),
 )
