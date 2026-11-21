@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.14.1...v1.0.0) (2026-11-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **server:** annotate tools, hide write tools without a token, add read-only mode ([#147](https://github.com/clappingmonkey/zuul-mcp/issues/147))
+* **security:** harden log fetching, HTTP transports and configuration ([#146](https://github.com/clappingmonkey/zuul-mcp/issues/146))
+* **api:** align client, models and tools with the real Zuul REST API ([#145](https://github.com/clappingmonkey/zuul-mcp/issues/145))
+
+### Features
+
+* **cli:** graceful shutdown, structured logging and secret files ([#148](https://github.com/clappingmonkey/zuul-mcp/issues/148)) ([0259c92](https://github.com/clappingmonkey/zuul-mcp/commit/0259c9224e17bc08f1bdd6049de7ff1503a626b6))
+* **server:** annotate tools, hide write tools without a token, add read-only mode ([#147](https://github.com/clappingmonkey/zuul-mcp/issues/147)) ([9c27e8c](https://github.com/clappingmonkey/zuul-mcp/commit/9c27e8c2138094a15d11ed1f6813bad43296e52c))
+
+
+### Bug Fixes
+
+* **api:** align client, models and tools with the real Zuul REST API ([#145](https://github.com/clappingmonkey/zuul-mcp/issues/145)) ([0a1cee9](https://github.com/clappingmonkey/zuul-mcp/commit/0a1cee95fabe2eb1702c2aa69d6f3e783dd324b8))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.1.0 ([#111](https://github.com/clappingmonkey/zuul-mcp/issues/111)) ([2ddb5e5](https://github.com/clappingmonkey/zuul-mcp/commit/2ddb5e5ec352865648b706542db0c8028f6a8d11))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.1.1 ([#115](https://github.com/clappingmonkey/zuul-mcp/issues/115)) ([6901826](https://github.com/clappingmonkey/zuul-mcp/commit/690182633f081f4f11f8a0c9378207faedfae97b))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.2.0 ([#126](https://github.com/clappingmonkey/zuul-mcp/issues/126)) ([3b6044f](https://github.com/clappingmonkey/zuul-mcp/commit/3b6044fdf0f743308e79c6fcd66f5152d569ec70))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.2.1 ([#127](https://github.com/clappingmonkey/zuul-mcp/issues/127)) ([5c98fbd](https://github.com/clappingmonkey/zuul-mcp/commit/5c98fbd925cc89db931d865e3722d94b5e507058))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.3.0 ([#131](https://github.com/clappingmonkey/zuul-mcp/issues/131)) ([7da7d5b](https://github.com/clappingmonkey/zuul-mcp/commit/7da7d5bb30db47ad714de581117a3a05bc740a50))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.4.0 ([#135](https://github.com/clappingmonkey/zuul-mcp/issues/135)) ([f03868e](https://github.com/clappingmonkey/zuul-mcp/commit/f03868ec650093383abe73fa3098c00593e16e60))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.5.0 ([#137](https://github.com/clappingmonkey/zuul-mcp/issues/137)) ([ddb9bda](https://github.com/clappingmonkey/zuul-mcp/commit/ddb9bdaf8cbdf71f8abe0621b1c75e3298baa668))
+* **deps:** update module github.com/mark3labs/mcp-go to v1.6.0 ([#150](https://github.com/clappingmonkey/zuul-mcp/issues/150)) ([c63adc7](https://github.com/clappingmonkey/zuul-mcp/commit/c63adc7c341ceb6b422017d24bc393d2add12730))
+* **security:** harden log fetching, HTTP transports and configuration ([#146](https://github.com/clappingmonkey/zuul-mcp/issues/146)) ([a331945](https://github.com/clappingmonkey/zuul-mcp/commit/a33194560c0489d29d71630d97c2f8586f78ac36))
+* **server:** stop silently dropping read filters and page config errors ([#152](https://github.com/clappingmonkey/zuul-mcp/issues/152)) ([0d75266](https://github.com/clappingmonkey/zuul-mcp/commit/0d752664d4e0c02a92c263de937395b9e9874e9e))
+
 ## [0.14.1](https://github.com/clappingmonkey/zuul-mcp/compare/v0.14.0...v0.14.1) (2026-09-11)
 
 
