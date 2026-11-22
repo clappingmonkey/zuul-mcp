@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/clappingmonkey/zuul-mcp/compare/v1.0.0...v1.0.1) (2026-11-22)
+
+
+### Documentation
+
+* show the real -version output of a release build ([#157](https://github.com/clappingmonkey/zuul-mcp/issues/157)) ([c5b7ba1](https://github.com/clappingmonkey/zuul-mcp/commit/c5b7ba169278428a9ee71d76738c840d5dd38c66))
+
 ## [1.0.0](https://github.com/clappingmonkey/zuul-mcp/compare/v0.14.1...v1.0.0) (2026-11-21)
 
 
