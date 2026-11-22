@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +74,28 @@ func TestServeStdio_EndOfInput(t *testing.T) {
 	err := serveStdio(context.Background(), s.MCPServer(), slog.New(slog.DiscardHandler), inR, io.Discard)
 	if err != nil {
 		t.Fatalf("serveStdio() = %v, want nil on EOF", err)
+	}
+}
+
+func TestWarnDeprecated(t *testing.T) {
+	for _, tc := range []struct {
+		transport string
+		wantWarn  bool
+	}{
+		{"stdio", false},
+		{"http", false},
+		{"sse", true},
+	} {
+		t.Run(tc.transport, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
+			warnDeprecated(logger, &config.Config{Transport: tc.transport})
+			out := buf.String()
+			got := strings.Contains(out, "level=WARN") && strings.Contains(out, "deprecated") && strings.Contains(out, "-transport=http")
+			if got != tc.wantWarn {
+				t.Errorf("warnDeprecated(%q) logged %q, want warning = %v", tc.transport, out, tc.wantWarn)
+			}
+		})
 	}
 }
 

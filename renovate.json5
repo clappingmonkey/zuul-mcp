@@ -33,6 +33,32 @@
       datasourceTemplate: 'github-tags',
       extractVersionTemplate: '^go(?<version>.*)$',
     },
+    {
+      customType: 'regex',
+      description: 'govulncheck version run by the vulnerability scan workflow',
+      managerFilePatterns: [
+        '/^\\.github/workflows/vulnerability-scan\\.yaml$/',
+      ],
+      matchStrings: [
+        'GOVULNCHECK_VERSION\\s*:\\s*["\']?(?<currentValue>v\\d+\\.\\d+\\.\\d+)["\']?',
+      ],
+      depNameTemplate: 'golang.org/x/vuln',
+      datasourceTemplate: 'go',
+    },
+    {
+      customType: 'regex',
+      description: 'golangci-lint release archives in MODULE.bazel',
+      managerFilePatterns: [
+        '/MODULE\\.bazel$/',
+      ],
+      matchStrings: [
+        'GOLANGCI_LINT_VERSION\\s*=\\s*["\'](?<currentValue>\\d+\\.\\d+\\.\\d+)["\']',
+      ],
+      depNameTemplate: 'golangci/golangci-lint',
+      datasourceTemplate: 'github-releases',
+      versioningTemplate: 'semver',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
   ],
   packageRules: [
     {
@@ -130,6 +156,46 @@
       labels: [
         'dependencies',
         'pre-commit',
+      ],
+    },
+    {
+      description: 'govulncheck version in the vulnerability scan workflow',
+      matchDepNames: [
+        'golang.org/x/vuln',
+      ],
+      matchManagers: [
+        'custom.regex',
+      ],
+      groupName: 'govulncheck',
+      labels: [
+        'dependencies',
+        'go',
+      ],
+    },
+    {
+      description: 'golangci-lint: the sha256 pins must be updated by hand',
+      matchDepNames: [
+        'golangci/golangci-lint',
+      ],
+      matchManagers: [
+        'custom.regex',
+      ],
+      groupName: 'golangci-lint',
+      labels: [
+        'dependencies',
+      ],
+      // addLabels survives the 'major' rule below, which replaces labels.
+      // renovate-auto-approve.yaml skips PRs labelled manual-hashes.
+      addLabels: [
+        'lint',
+        'manual-hashes',
+      ],
+      // Renovate only bumps GOLANGCI_LINT_VERSION; the four http_archive
+      // sha256 values in MODULE.bazel stay stale, so the pre-commit hooks job
+      // fails on a checksum mismatch until they are updated. Never automerge.
+      automerge: false,
+      prBodyNotes: [
+        '⚠️ **Manual step required:** update all four `golangci_lint_*` `sha256` values in `MODULE.bazel` from `golangci-lint-{{{newVersion}}}-checksums.txt` on the [release page](https://github.com/golangci/golangci-lint/releases/tag/v{{{newVersion}}}). CI only verifies the linux-amd64 hash.',
       ],
     },
     {

@@ -64,8 +64,12 @@ golangci-lint can also be run directly (configuration in
 bazel run //tools/lint:golangci_lint -- run ./...
 ```
 
-The golangci-lint release is pinned by version and sha256 in `MODULE.bazel`;
-Renovate does not update it, so bump the version and all four hashes together.
+The golangci-lint release is pinned by version and sha256 in `MODULE.bazel`.
+Renovate opens a PR that bumps only the version, and it is never automerged.
+Before merging, update all four `sha256` values from the release's
+`golangci-lint-<version>-checksums.txt`. CI fails on a stale linux-amd64 hash
+but does not download the other three, so check those by hand. The govulncheck
+version in the vulnerability scan workflow is also bumped by Renovate.
 
 ## Adding a Dependency
 

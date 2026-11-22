@@ -44,7 +44,7 @@ func newLogger(level slog.Level) *slog.Logger {
 
 func run() error {
 	envFile := flag.String("env-file", "", "Path to .env file for configuration")
-	transportMode := flag.String("transport", "", "Transport mode: stdio (default), http, or sse")
+	transportMode := flag.String("transport", "", "Transport mode: stdio (default), http, or sse (deprecated)")
 	host := flag.String("host", "", "HTTP/SSE bind address (default: 127.0.0.1)")
 	port := flag.String("port", "", "HTTP/SSE server port (default: 8080)")
 	readOnly := flag.Bool("read-only", false, "Hide tools that change Zuul state (also ZUUL_READ_ONLY=true)")
@@ -103,6 +103,7 @@ func run() error {
 	if reason := server.WriteToolsDisabledReason(cfg); reason != "" {
 		slog.Info("tools that change Zuul state are disabled", "reason", reason)
 	}
+	warnDeprecated(logger, cfg)
 
 	if cfg.Transport == "stdio" {
 		return serveStdio(ctx, s.MCPServer(), logger, os.Stdin, os.Stdout)
@@ -163,6 +164,13 @@ func serveStdio(ctx context.Context, s *mcpserver.MCPServer, logger *slog.Logger
 	}
 	slog.Info("stopped")
 	return nil
+}
+
+// warnDeprecated logs configuration that still works but will be removed.
+func warnDeprecated(logger *slog.Logger, cfg *config.Config) {
+	if cfg.Transport == "sse" {
+		logger.Warn("the sse transport is deprecated by the MCP specification and will be removed in a future release; use -transport=http (Streamable HTTP, endpoint /mcp) instead")
+	}
 }
 
 // zuulHost returns only the host of the Zuul URL for logging: the path may

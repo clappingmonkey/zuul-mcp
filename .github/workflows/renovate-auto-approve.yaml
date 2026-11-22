@@ -11,13 +11,15 @@ jobs:
     name: Approve non-major update
     # The PR author and head repository identify a Renovate PR. The actor
     # check additionally skips runs where someone else pushed to the branch,
-    # so their commits are never auto-approved.
+    # so their commits are never auto-approved. PRs labelled manual-hashes
+    # (golangci-lint bumps, see renovate.json5) need a human to update pins.
     if: >- # zizmor: ignore[bot-conditions] -- ANDed with the PR author check; only narrows
       github.event.pull_request.user.login == 'renovate-boto[bot]' &&
       github.actor == 'renovate-boto[bot]' &&
       github.triggering_actor == 'renovate-boto[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      !contains(github.event.pull_request.labels.*.name, 'major')
+      !contains(github.event.pull_request.labels.*.name, 'major') &&
+      !contains(github.event.pull_request.labels.*.name, 'manual-hashes')
     runs-on: ubuntu-latest
     permissions: {}
     steps:
