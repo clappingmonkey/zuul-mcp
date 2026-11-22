@@ -28,8 +28,9 @@ use_repo(
 )
 
 # golangci-lint: official release binaries, pinned by sha256 from the release's
-# golangci-lint-<version>-checksums.txt. Bump the version and all four hashes
-# together. Run with: bazel run //tools/lint:golangci_lint -- run ./...
+# golangci-lint-<version>-checksums.txt. Renovate bumps the version only; update
+# all four hashes in the same PR. Run with:
+# bazel run //tools/lint:golangci_lint -- run ./...
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 GOLANGCI_LINT_VERSION = "2.15.0"

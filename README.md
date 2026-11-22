@@ -38,7 +38,7 @@ A Model Context Protocol (MCP) server that enables AI applications like Claude t
   - `promote` - Promote changes to the top of a pipeline queue (requires auth)
 
 - **Safe by default**: the five write tools are only offered when `ZUUL_AUTH_TOKEN` is set and read-only mode is off. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) so clients can ask for confirmation before state-changing calls.
-- **Multiple Transport Modes**: stdio (for Claude Desktop), HTTP, and SSE
+- **Multiple Transport Modes**: stdio (for Claude Desktop), Streamable HTTP, and legacy SSE (deprecated)
 - **Cross-Platform**: Native binaries for Linux, macOS, and Windows
 - **Optional Authentication**: JWT Bearer tokens for authenticated endpoints
 
@@ -102,7 +102,7 @@ Configuration can be done via environment variables or an env file:
 | `ZUUL_DEFAULT_TENANT` | No | Default tenant to use if not specified in tool calls |
 | `ZUUL_AUTH_TOKEN` | No | JWT Bearer token for write tools (create/delete autohold, enqueue, dequeue, promote). Without it the write tools are not offered |
 | `ZUUL_READ_ONLY` | No | Set to `true` to hide the write tools even when `ZUUL_AUTH_TOKEN` is set (same as `-read-only`) |
-| `ZUUL_TRANSPORT` | No | Transport mode: `stdio` (default), `http`, or `sse` |
+| `ZUUL_TRANSPORT` | No | Transport mode: `stdio` (default), `http`, or `sse` (deprecated) |
 | `ZUUL_HTTP_PORT` | No | HTTP/SSE server port (default: `8080`) |
 | `ZUUL_HTTP_HOST` | No | HTTP/SSE bind address (default: `127.0.0.1`) |
 | `ZUUL_HTTP_AUTH_TOKEN` | No | Bearer token (min. 32 characters) clients must send to the HTTP/SSE transport. Required when `ZUUL_HTTP_HOST` is not a loopback address |
@@ -220,8 +220,11 @@ Without a token, connections on `127.0.0.1` must also carry a loopback `Host`
 header (DNS rebinding protection). A reverse proxy on the same machine that
 forwards its public `Host` therefore needs `ZUUL_HTTP_AUTH_TOKEN` as well.
 
-Browsers cannot send an `Authorization` header with the legacy SSE transport's
-`EventSource`, so use `-transport=http` for browser clients that need a token.
+The `sse` transport is deprecated: the MCP specification replaced HTTP+SSE with
+Streamable HTTP, and `sse` will be removed in a future release. It still works,
+but the server logs a warning at startup. Switch clients to `-transport=http`
+(endpoint `/mcp`). Browsers also cannot send an `Authorization` header with
+SSE's `EventSource`, so browser clients that need a token must use `http`.
 
 ## Command Line Options
 
@@ -232,7 +235,7 @@ zuul-mcp [options]
 | Flag | Description |
 |------|-------------|
 | `-env-file` | Path to `.env` file for configuration |
-| `-transport` | Transport mode: `stdio` (default), `http`, or `sse` |
+| `-transport` | Transport mode: `stdio` (default), `http`, or `sse` (deprecated) |
 | `-host` | HTTP/SSE bind address (default: `127.0.0.1`) |
 | `-port` | HTTP/SSE server port (default: `8080`) |
 | `-read-only` | Hide tools that change Zuul state |
